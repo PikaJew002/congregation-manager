@@ -13,9 +13,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * @property int $id
+ * @property string $uuid
  * @property string $name
  * @property string $slug
  * @property bool $is_personal
@@ -26,7 +28,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, Membership> $memberships
  * @property-read Collection<int, User> $members
  */
-#[Fillable(['name', 'slug', 'is_personal'])]
+#[Fillable(['name', 'slug', 'is_personal', 'uuid'])]
 class Team extends Model
 {
     /** @use HasFactory<TeamFactory> */
@@ -40,6 +42,10 @@ class Team extends Model
         parent::boot();
 
         static::creating(function (Team $team) {
+            if (empty($team->uuid)) {
+                $team->uuid = (string) Str::uuid();
+            }
+
             if (empty($team->slug)) {
                 $team->slug = static::generateUniqueTeamSlug($team->name);
             }
@@ -93,6 +99,29 @@ class Team extends Model
     public function invitations(): HasMany
     {
         return $this->hasMany(TeamInvitation::class);
+    }
+
+    /**
+     * @return HasMany<TeamModule, $this>
+     */
+    public function moduleSettings(): HasMany
+    {
+        return $this->hasMany(TeamModule::class);
+    }
+
+    /**
+     * @return HasMany<TeamModuleUser, $this>
+     */
+    public function moduleGrants(): HasMany
+    {
+        return $this->hasMany(TeamModuleUser::class);
+    }
+
+    public function privilegedMemberCount(): int
+    {
+        return $this->memberships()
+            ->whereIn('role', [TeamRole::Owner->value, TeamRole::SuperAdmin->value])
+            ->count();
     }
 
     /**

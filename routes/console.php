@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\TeamInvitation;
+use App\Support\Modules\ModuleRegistry;
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::call(function () {
@@ -8,4 +9,6 @@ Schedule::call(function () {
         ->whereNotNull('expires_at')
         ->where('expires_at', '<', now())
         ->delete();
-})->daily()->description('Delete expired team invitations');
+})->daily()->description('Delete expired congregation invitations');
+
+app(ModuleRegistry::class)->schedule(Schedule::getFacadeRoot());

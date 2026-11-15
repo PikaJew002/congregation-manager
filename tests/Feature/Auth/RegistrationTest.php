@@ -48,6 +48,7 @@ class RegistrationTest extends TestCase
         $response = $this->post(route('register.store'), [
             'name' => 'Test User',
             'email' => 'test@example.com',
+            'congregation_name' => 'Test Congregation',
             'password' => 'password',
             'password_confirmation' => 'password',
         ]);
@@ -55,6 +56,12 @@ class RegistrationTest extends TestCase
         $this->assertAuthenticated();
 
         $user = User::where('email', 'test@example.com')->first();
-        $response->assertRedirect(route('dashboard'));
+        $team = $user->currentTeam;
+
+        $this->assertNotNull($team);
+        $this->assertSame('Test Congregation', $team->name);
+        $this->assertFalse($team->is_personal);
+        $this->assertTrue($user->ownsTeam($team));
+        $response->assertRedirect(route('dashboard', ['current_team' => $team->slug]));
     }
 }

@@ -1,0 +1,30 @@
+<?php
+
+namespace App\Modules\{{studly}};
+
+use App\Support\Modules\ModuleRegistry;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ServiceProvider;
+
+class {{studly}}ServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->app->make(ModuleRegistry::class)->register(new {{studly}}Module);
+    }
+
+    public function boot(): void
+    {
+        $this->loadMigrationsFrom(__DIR__.'/database/migrations');
+
+        Route::middleware(['web', 'auth', 'verified', \App\Http\Middleware\EnsureTeamMembership::class, 'module:{{key}}'])
+            ->prefix('{current_team}/{{key}}')
+            ->name('{{key}}.')
+            ->group(__DIR__.'/routes/web.php');
+
+        if (is_file(__DIR__.'/routes/webhooks.php')) {
+            Route::middleware('web')
+                ->group(__DIR__.'/routes/webhooks.php');
+        }
+    }
+}

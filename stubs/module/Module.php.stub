@@ -1,0 +1,36 @@
+<?php
+
+namespace App\Modules\{{studly}};
+
+use App\Support\Modules\ModuleDefinition;
+use Illuminate\Console\Scheduling\Schedule;
+
+class {{studly}}Module implements ModuleDefinition
+{
+    public function key(): string
+    {
+        return '{{key}}';
+    }
+
+    public function name(): string
+    {
+        return '{{label}}';
+    }
+
+    public function icon(): string
+    {
+        return 'layout-grid';
+    }
+
+    public function navItems(): array
+    {
+        return [
+            ['title' => '{{label}}', 'route' => '{{key}}.index'],
+        ];
+    }
+
+    public function schedule(Schedule $schedule): void
+    {
+        //
+    }
+}

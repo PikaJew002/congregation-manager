@@ -45,9 +45,10 @@ const declineInvitation = (invitation: DashboardInvitation) => {
     <Dialog v-model:open="open">
         <DialogContent data-test="pending-invitations-modal">
             <DialogHeader>
-                <DialogTitle>Pending team invitations</DialogTitle>
+                <DialogTitle>Pending invitations</DialogTitle>
                 <DialogDescription>
-                    Accept or decline the teams you have been invited to join.
+                    Accept or decline the congregations you have been invited to
+                    join.
                 </DialogDescription>
             </DialogHeader>
 

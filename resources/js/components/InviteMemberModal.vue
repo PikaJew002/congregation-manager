@@ -22,11 +22,12 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { store as storeInvitation } from '@/routes/teams/invitations';
-import type { RoleOption, Team } from '@/types';
+import type { CongregationModule, RoleOption, Team } from '@/types';
 
 type Props = {
     team: Team;
     availableRoles: RoleOption[];
+    modules?: CongregationModule[];
     open: boolean;
 };
 
@@ -59,9 +60,9 @@ function handleOpenChange(value: boolean) {
                 @success="emit('update:open', false)"
             >
                 <DialogHeader>
-                    <DialogTitle>Invite a team member</DialogTitle>
+                    <DialogTitle>Invite a member</DialogTitle>
                     <DialogDescription>
-                        Send an invitation to join this team.
+                        Send an invitation to join this congregation.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -100,6 +101,28 @@ function handleOpenChange(value: boolean) {
                             </SelectContent>
                         </Select>
                         <InputError :message="errors.role" />
+                    </div>
+
+                    <div
+                        v-if="props.modules?.some((module) => module.enabled)"
+                        class="grid gap-2"
+                    >
+                        <Label>Modules</Label>
+                        <label
+                            v-for="module in props.modules.filter(
+                                (item) => item.enabled,
+                            )"
+                            :key="module.key"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <input
+                                type="checkbox"
+                                name="modules[]"
+                                :value="module.key"
+                                class="size-4"
+                            />
+                            {{ module.name }}
+                        </label>
                     </div>
                 </div>
 

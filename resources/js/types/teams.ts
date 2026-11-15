@@ -1,4 +1,4 @@
-export type TeamRole = 'owner' | 'admin' | 'member';
+export type TeamRole = 'owner' | 'super_admin' | 'member';
 
 export type Team = {
     id: number;
@@ -17,6 +17,13 @@ export type TeamMember = {
     avatar?: string | null;
     role: TeamRole;
     role_label: string;
+    modules?: string[];
+};
+
+export type CongregationModule = {
+    key: string;
+    name: string;
+    enabled: boolean;
 };
 
 export type TeamInvitation = {
@@ -30,6 +37,7 @@ export type TeamInvitation = {
 export type TeamInvitationContext = {
     code: string;
     teamName: string;
+    email?: string;
 };
 
 export type DashboardInvitation = {

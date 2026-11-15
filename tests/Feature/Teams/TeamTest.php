@@ -254,7 +254,7 @@ class TeamTest extends TestCase
             ->delete(route('teams.leave', $team));
 
         $response->assertRedirect(route('teams.index'));
-        $response->assertInertiaFlash('toast', ['type' => 'success', 'message' => "You left the team \"{$team->name}\""]);
+        $response->assertInertiaFlash('toast', ['type' => 'success', 'message' => "You left the congregation \"{$team->name}\""]);
 
         $this->assertFalse($member->fresh()->belongsToTeam($team));
     }

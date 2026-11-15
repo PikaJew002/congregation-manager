@@ -24,18 +24,18 @@ class TeamMemberTest extends TestCase
         $response = $this
             ->actingAs($owner)
             ->patch(route('teams.members.update', [$team, $member]), [
-                'role' => TeamRole::Admin->value,
+                'role' => TeamRole::SuperAdmin->value,
             ]);
 
         $response->assertRedirect(route('teams.edit', $team));
 
         $this->assertEquals(
-            TeamRole::Admin->value,
+            TeamRole::SuperAdmin->value,
             $team->members()->where('user_id', $member->id)->first()->pivot->role->value,
         );
     }
 
-    public function test_team_member_roles_cannot_be_updated_by_non_owners()
+    public function test_team_member_roles_can_be_updated_by_super_admins()
     {
         $owner = User::factory()->create();
         $admin = User::factory()->create();
@@ -43,13 +43,33 @@ class TeamMemberTest extends TestCase
         $team = Team::factory()->create();
 
         $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
-        $team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
+        $team->members()->attach($admin, ['role' => TeamRole::SuperAdmin->value]);
         $team->members()->attach($member, ['role' => TeamRole::Member->value]);
 
         $response = $this
             ->actingAs($admin)
             ->patch(route('teams.members.update', [$team, $member]), [
-                'role' => TeamRole::Admin->value,
+                'role' => TeamRole::SuperAdmin->value,
+            ]);
+
+        $response->assertRedirect(route('teams.edit', $team));
+    }
+
+    public function test_team_member_roles_cannot_be_updated_by_members()
+    {
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $member = User::factory()->create();
+        $team = Team::factory()->create();
+
+        $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+        $team->members()->attach($admin, ['role' => TeamRole::Member->value]);
+        $team->members()->attach($member, ['role' => TeamRole::Member->value]);
+
+        $response = $this
+            ->actingAs($admin)
+            ->patch(route('teams.members.update', [$team, $member]), [
+                'role' => TeamRole::SuperAdmin->value,
             ]);
 
         $response->assertForbidden();
@@ -73,7 +93,7 @@ class TeamMemberTest extends TestCase
         $this->assertFalse($member->fresh()->belongsToTeam($team));
     }
 
-    public function test_team_members_cannot_be_removed_by_non_owners()
+    public function test_team_members_cannot_be_removed_by_members()
     {
         $owner = User::factory()->create();
         $admin = User::factory()->create();
@@ -81,7 +101,7 @@ class TeamMemberTest extends TestCase
         $team = Team::factory()->create();
 
         $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
-        $team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
+        $team->members()->attach($admin, ['role' => TeamRole::Member->value]);
         $team->members()->attach($member, ['role' => TeamRole::Member->value]);
 
         $response = $this

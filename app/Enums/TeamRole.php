@@ -5,7 +5,7 @@ namespace App\Enums;
 enum TeamRole: string
 {
     case Owner = 'owner';
-    case Admin = 'admin';
+    case SuperAdmin = 'super_admin';
     case Member = 'member';
 
     /**
@@ -13,7 +13,11 @@ enum TeamRole: string
      */
     public function label(): string
     {
-        return ucfirst($this->value);
+        return match ($this) {
+            self::Owner => 'Owner',
+            self::SuperAdmin => 'Super admin',
+            self::Member => 'Member',
+        };
     }
 
     /**
@@ -25,8 +29,11 @@ enum TeamRole: string
     {
         return match ($this) {
             self::Owner => TeamPermission::cases(),
-            self::Admin => [
+            self::SuperAdmin => [
                 TeamPermission::UpdateTeam,
+                TeamPermission::AddMember,
+                TeamPermission::UpdateMember,
+                TeamPermission::RemoveMember,
                 TeamPermission::CreateInvitation,
                 TeamPermission::CancelInvitation,
             ],
@@ -50,7 +57,7 @@ enum TeamRole: string
     {
         return match ($this) {
             self::Owner => 3,
-            self::Admin => 2,
+            self::SuperAdmin => 2,
             self::Member => 1,
         };
     }

@@ -25,6 +25,29 @@ declare module '@inertiajs/core' {
             teams: Team[];
             [key: string]: unknown;
         };
+        flashDataType: {
+            toast?: {
+                type: 'success' | 'info' | 'warning' | 'error';
+                message: string;
+            };
+            plainTextToken?: string;
+            fillResult?: {
+                deck: number;
+                unmatched: Record<string, string[]>;
+                notes: string[];
+            };
+            importResult?: {
+                decks: number;
+                unmatched: Array<{
+                    date: string;
+                    template: string;
+                    slot: string;
+                    titles: string[];
+                }>;
+                errors: string[];
+            };
+            deck?: number;
+        };
     }
 }
 

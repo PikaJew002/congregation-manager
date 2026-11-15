@@ -17,6 +17,7 @@ use Illuminate\Support\Str;
  * @property int $team_id
  * @property string $email
  * @property TeamRole $role
+ * @property list<string>|null $modules
  * @property int $invited_by
  * @property Carbon|null $expires_at
  * @property Carbon|null $accepted_at
@@ -25,7 +26,7 @@ use Illuminate\Support\Str;
  * @property-read Team $team
  * @property-read User $inviter
  */
-#[Fillable(['team_id', 'email', 'role', 'invited_by', 'expires_at', 'accepted_at'])]
+#[Fillable(['team_id', 'email', 'role', 'modules', 'invited_by', 'expires_at', 'accepted_at'])]
 class TeamInvitation extends Model
 {
     /** @use HasFactory<TeamInvitationFactory> */
@@ -98,6 +99,7 @@ class TeamInvitation extends Model
     {
         return [
             'role' => TeamRole::class,
+            'modules' => 'array',
             'expires_at' => 'datetime',
             'accepted_at' => 'datetime',
         ];

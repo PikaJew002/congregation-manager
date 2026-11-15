@@ -36,7 +36,7 @@ defineOptions({
     layout: {
         breadcrumbs: [
             {
-                title: 'Teams',
+                title: 'Congregations',
                 href: index(),
             },
         ],
@@ -45,21 +45,21 @@ defineOptions({
 </script>
 
 <template>
-    <Head title="Teams" />
+    <Head title="Congregations" />
 
-    <h1 class="sr-only">Teams</h1>
+    <h1 class="sr-only">Congregations</h1>
 
     <div class="flex flex-col space-y-6">
         <div class="flex items-center justify-between">
             <Heading
                 variant="small"
-                title="Teams"
-                description="Manage your teams and team memberships"
+                title="Congregations"
+                description="Manage the congregations you belong to"
             />
 
             <CreateTeamModal>
                 <Button data-test="teams-new-team-button">
-                    <Plus /> New team
+                    <Plus /> New congregation
                 </Button>
             </CreateTeamModal>
         </div>
@@ -99,7 +99,7 @@ defineOptions({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>Leave team</p>
+                                <p>Leave congregation</p>
                             </TooltipContent>
                         </Tooltip>
 
@@ -117,7 +117,7 @@ defineOptions({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>View team</p>
+                                <p>View congregation</p>
                             </TooltipContent>
                         </Tooltip>
 
@@ -135,7 +135,7 @@ defineOptions({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>Edit team</p>
+                                <p>Edit congregation</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>

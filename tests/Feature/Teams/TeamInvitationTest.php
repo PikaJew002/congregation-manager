@@ -56,8 +56,8 @@ class TeamInvitationTest extends TestCase
 
         $mail = (new TeamInvitationNotification($invitation))->toMail($invitedUser);
 
-        $this->assertSame(route('login', ['invitation' => $invitation->code]), $mail->actionUrl);
-        $this->assertStringContainsString('dashboard', implode(' ', $mail->introLines));
+        $this->assertSame(route('invitations.show', $invitation), $mail->actionUrl);
+        $this->assertStringContainsString('congregation', strtolower(implode(' ', $mail->introLines)));
     }
 
     public function test_invitation_email_for_unknown_users_uses_login_route()
@@ -75,8 +75,8 @@ class TeamInvitationTest extends TestCase
 
         $mail = (new TeamInvitationNotification($invitation))->toMail((object) []);
 
-        $this->assertSame(route('login', ['invitation' => $invitation->code]), $mail->actionUrl);
-        $this->assertStringContainsString('log in', strtolower(implode(' ', $mail->introLines)));
+        $this->assertSame(route('invitations.show', $invitation), $mail->actionUrl);
+        $this->assertStringContainsString('invitation', strtolower(implode(' ', $mail->introLines)));
     }
 
     public function test_team_invitations_can_be_created_by_admins()
@@ -88,7 +88,7 @@ class TeamInvitationTest extends TestCase
         $team = Team::factory()->create();
 
         $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
-        $team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
+        $team->members()->attach($admin, ['role' => TeamRole::SuperAdmin->value]);
 
         $response = $this
             ->actingAs($admin)

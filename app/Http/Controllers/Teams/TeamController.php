@@ -10,6 +10,8 @@ use App\Http\Requests\Teams\SaveTeamRequest;
 use App\Models\Membership;
 use App\Models\Team;
 use App\Models\User;
+use App\Support\Modules\ModuleAccess;
+use App\Support\Modules\ModuleRegistry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,7 +40,7 @@ class TeamController extends Controller
     {
         $team = $createTeam->handle($request->user(), $request->validated('name'));
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team created.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Congregation created.')]);
 
         return to_route('teams.edit', ['team' => $team->slug]);
     }
@@ -46,9 +48,15 @@ class TeamController extends Controller
     /**
      * Show the team edit page.
      */
-    public function edit(Request $request, Team $team): Response
+    public function edit(Request $request, Team $team, ModuleRegistry $modules, ModuleAccess $access): Response
     {
         $user = $request->user();
+
+        $catalog = collect($modules->all())->map(fn ($module) => [
+            'key' => $module->key(),
+            'name' => $module->name(),
+            'enabled' => $access->isEnabled($team, $module->key()),
+        ])->values();
 
         return Inertia::render('teams/Edit', [
             'team' => [
@@ -57,7 +65,8 @@ class TeamController extends Controller
                 'slug' => $team->slug,
                 'isPersonal' => $team->is_personal,
             ],
-            'members' => $team->members()->get()->map(function (User $member) {
+            'modules' => $catalog,
+            'members' => $team->members()->get()->map(function (User $member) use ($access, $team) {
                 /** @var Membership $membership */
                 $membership = $member->getRelation('pivot');
 
@@ -68,6 +77,7 @@ class TeamController extends Controller
                     'avatar' => $member->avatar ?? null,
                     'role' => $membership->role->value,
                     'role_label' => $membership->role->label(),
+                    'modules' => $access->grantsFor($team, $member),
                 ];
             }),
             'invitations' => $team->invitations()
@@ -100,7 +110,7 @@ class TeamController extends Controller
             return $team;
         });
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team updated.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Congregation updated.')]);
 
         return to_route('teams.edit', ['team' => $team->slug]);
     }
@@ -138,7 +148,7 @@ class TeamController extends Controller
             $user->switchTeam($fallbackTeam);
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('You left the team ":name"', ['name' => $team->name])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('You left the congregation ":name"', ['name' => $team->name])]);
 
         return to_route('teams.index');
     }
@@ -156,7 +166,13 @@ class TeamController extends Controller
         DB::transaction(function () use ($user, $team) {
             User::where('current_team_id', $team->id)
                 ->where('id', '!=', $user->id)
-                ->each(fn (User $affectedUser) => $affectedUser->switchTeam($affectedUser->personalTeam()));
+                ->each(function (User $affectedUser) use ($team) {
+                    $fallback = $affectedUser->fallbackTeam($team);
+
+                    if ($fallback) {
+                        $affectedUser->switchTeam($fallback);
+                    }
+                });
 
             $team->invitations()->delete();
             $team->memberships()->delete();
@@ -167,7 +183,7 @@ class TeamController extends Controller
             $user->switchTeam($fallbackTeam);
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team deleted.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Congregation deleted.')]);
 
         return to_route('teams.index');
     }

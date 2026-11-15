@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureModuleAccess;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetTeamUrlDefaults;
@@ -17,6 +18,15 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+
+        $middleware->alias([
+            'module' => EnsureModuleAccess::class,
+        ]);
+
+        $middleware->validateCsrfTokens(except: [
+            'unsubscribe/*',
+            'webhooks/*',
+        ]);
 
         $middleware->web(append: [
             HandleAppearance::class,

@@ -56,6 +56,26 @@ defineOptions({
                 <InputError :message="errors.name" />
             </div>
 
+            <div v-if="!teamInvitation" class="grid gap-2">
+                <Label for="congregation_name">Congregation name</Label>
+                <Input
+                    id="congregation_name"
+                    type="text"
+                    required
+                    :tabindex="2"
+                    name="congregation_name"
+                    placeholder="Congregation name"
+                />
+                <InputError :message="errors.congregation_name" />
+            </div>
+
+            <input
+                v-if="teamInvitation"
+                type="hidden"
+                name="invitation"
+                :value="teamInvitation.code"
+            />
+
             <div class="grid gap-2">
                 <Label for="email">Email address</Label>
                 <Input
@@ -66,6 +86,8 @@ defineOptions({
                     autocomplete="email"
                     name="email"
                     placeholder="email@example.com"
+                    :readonly="Boolean(teamInvitation)"
+                    :default-value="teamInvitation?.email"
                 />
                 <InputError :message="errors.email" />
             </div>

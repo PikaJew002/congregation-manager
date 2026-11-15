@@ -117,7 +117,7 @@ class FortifyServiceProvider extends ServiceProvider
     /**
      * Get the pending team invitation context for auth pages.
      *
-     * @return array{code: string, teamName: string}|null
+     * @return array{code: string, teamName: string, email: string}|null
      */
     private function teamInvitation(Request $request): ?array
     {
@@ -143,6 +143,7 @@ class FortifyServiceProvider extends ServiceProvider
         return [
             'code' => $invitation->code,
             'teamName' => $invitation->team->name,
+            'email' => $invitation->email,
         ];
     }
 }

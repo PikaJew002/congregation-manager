@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\Modules\ModuleAccess;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -46,6 +47,9 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'currentTeam' => fn () => $user?->currentTeam ? $user->toUserTeam($user->currentTeam) : null,
             'teams' => fn () => $user?->toUserTeams(includeCurrent: true) ?? [],
+            'modules' => fn () => $user?->currentTeam
+                ? app(ModuleAccess::class)->navigationFor($user, $user->currentTeam)
+                : [],
         ];
     }
 }

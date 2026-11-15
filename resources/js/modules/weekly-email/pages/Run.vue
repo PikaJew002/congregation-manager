@@ -1,0 +1,206 @@
+<script setup lang="ts">
+import { Form, Head, router, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import Heading from '@/components/Heading.vue';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { runs as runsRoute } from '@/routes/weekly-email';
+import { cancel, retry, show } from '@/routes/weekly-email/runs';
+import type { Team } from '@/types';
+import { formatDateTime, statusVariant } from '../format';
+import type { EmailDelivery, EmailRun } from '../types';
+
+const props = defineProps<{
+    run: EmailRun;
+    deliveries: EmailDelivery[];
+}>();
+
+defineOptions({
+    layout: (props: { currentTeam?: Team | null; run: EmailRun }) => ({
+        breadcrumbs: [
+            {
+                title: 'Email runs',
+                href: runsRoute(props.currentTeam?.slug ?? ''),
+            },
+            {
+                title: props.run.subject,
+                href: show([props.currentTeam?.slug ?? '', props.run.id]),
+            },
+        ],
+    }),
+});
+
+const page = usePage();
+
+let teamSlug = computed(() => page.props.currentTeam?.slug ?? '');
+
+let counts = computed(() => {
+    const result = { pending: 0, sent: 0, failed: 0, cancelled: 0 };
+
+    for (const delivery of props.deliveries) {
+        result[delivery.status]++;
+    }
+
+    return result;
+});
+
+let canCancel = computed(
+    () =>
+        ['scheduled', 'sending'].includes(props.run.status) &&
+        counts.value.pending > 0,
+);
+
+let canRetry = computed(
+    () => props.run.status !== 'cancelled' && counts.value.failed > 0,
+);
+
+let cancelling = ref(false);
+
+const cancelRun = () => {
+    if (
+        !confirm(
+            `Cancel this run? ${counts.value.pending} pending emails will not be sent.`,
+        )
+    ) {
+        return;
+    }
+
+    router.visit(cancel([teamSlug.value, props.run.id]), {
+        preserveScroll: true,
+        onStart: () => (cancelling.value = true),
+        onFinish: () => (cancelling.value = false),
+    });
+};
+</script>
+
+<template>
+    <Head :title="run.subject" />
+
+    <div class="flex flex-col space-y-8 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div class="space-y-2">
+                <Heading
+                    :title="run.subject"
+                    :description="`Scheduled for ${formatDateTime(run.scheduled_for)}`"
+                />
+                <Badge :variant="statusVariant(run.status)">
+                    {{ run.status }}
+                </Badge>
+            </div>
+
+            <div class="flex gap-2">
+                <Form
+                    v-if="canRetry"
+                    v-bind="retry.form([teamSlug, run.id])"
+                    :options="{ preserveScroll: true }"
+                    v-slot="{ processing }"
+                >
+                    <Button
+                        type="submit"
+                        variant="secondary"
+                        :disabled="processing"
+                    >
+                        Retry {{ counts.failed }} failed
+                    </Button>
+                </Form>
+                <Button
+                    v-if="canCancel"
+                    variant="destructive"
+                    :disabled="cancelling"
+                    @click="cancelRun"
+                >
+                    Cancel run
+                </Button>
+            </div>
+        </div>
+
+        <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div
+                v-for="(count, status) in counts"
+                :key="status"
+                class="rounded-lg border p-4"
+            >
+                <dt class="text-sm text-muted-foreground capitalize">
+                    {{ status }}
+                </dt>
+                <dd class="text-2xl font-semibold tabular-nums">{{ count }}</dd>
+            </div>
+        </dl>
+
+        <details class="rounded-lg border p-4">
+            <summary class="cursor-pointer text-sm font-medium">
+                Message body (as sent)
+            </summary>
+            <pre
+                class="mt-4 font-mono text-sm whitespace-pre-wrap text-muted-foreground"
+                >{{ run.body }}</pre>
+        </details>
+
+        <div class="space-y-4">
+            <Heading variant="small" title="Deliveries" />
+
+            <p
+                v-if="deliveries.length === 0"
+                class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
+            >
+                This run had no subscribed recipients.
+            </p>
+
+            <div v-else class="overflow-x-auto rounded-lg border">
+                <table class="w-full text-sm">
+                    <thead class="bg-muted/50 text-left text-muted-foreground">
+                        <tr>
+                            <th class="px-4 py-2 font-medium">Recipient</th>
+                            <th class="px-4 py-2 font-medium">Scheduled</th>
+                            <th class="px-4 py-2 font-medium">Sent</th>
+                            <th class="px-4 py-2 font-medium">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="delivery in deliveries"
+                            :key="delivery.id"
+                            class="border-t align-top"
+                        >
+                            <td class="px-4 py-2">
+                                <template v-if="delivery.recipient">
+                                    <div class="font-medium">
+                                        {{ delivery.recipient.email }}
+                                    </div>
+                                    <div
+                                        v-if="delivery.recipient.name"
+                                        class="text-muted-foreground"
+                                    >
+                                        {{ delivery.recipient.name }}
+                                    </div>
+                                </template>
+                                <span v-else class="text-muted-foreground">
+                                    Removed recipient
+                                </span>
+                            </td>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                {{ formatDateTime(delivery.scheduled_at) }}
+                            </td>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                {{ formatDateTime(delivery.sent_at) }}
+                            </td>
+                            <td class="px-4 py-2">
+                                <Badge
+                                    :variant="statusVariant(delivery.status)"
+                                >
+                                    {{ delivery.status }}
+                                </Badge>
+                                <p
+                                    v-if="delivery.error"
+                                    class="mt-1 max-w-md text-xs break-words text-destructive"
+                                >
+                                    {{ delivery.error }}
+                                </p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</template>

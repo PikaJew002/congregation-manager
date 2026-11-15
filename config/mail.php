@@ -79,6 +79,14 @@ return [
             'transport' => 'array',
         ],
 
+        'mailchannels' => [
+            'transport' => 'mailchannels',
+            'key' => env('MAILCHANNELS_API_KEY'),
+            'dkim_domain' => env('MAILCHANNELS_DKIM_DOMAIN'),
+            'dkim_selector' => env('MAILCHANNELS_DKIM_SELECTOR'),
+            'dkim_private_key' => env('MAILCHANNELS_DKIM_PRIVATE_KEY'),
+        ],
+
         'failover' => [
             'transport' => 'failover',
             'mailers' => [

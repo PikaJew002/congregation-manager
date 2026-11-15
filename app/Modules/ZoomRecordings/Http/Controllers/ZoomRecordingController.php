@@ -1,0 +1,96 @@
+<?php
+
+namespace App\Modules\ZoomRecordings\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use App\Models\Team;
+use App\Modules\ZoomRecordings\Actions\DispatchRecordingPipeline;
+use App\Modules\ZoomRecordings\Jobs\UpdateManifest;
+use App\Modules\ZoomRecordings\Models\ZoomRecording;
+use App\Modules\ZoomRecordings\Models\ZoomRecordingSetting;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class ZoomRecordingController extends Controller
+{
+    public function index(Team $current_team): Response
+    {
+        return Inertia::render('zoom-recordings/Index', [
+            'recordings' => ZoomRecording::query()->forTeam($current_team)->latest()->limit(100)->get(),
+            'publicBaseUrl' => ZoomRecordingSetting::forTeam($current_team)->public_base_url,
+        ]);
+    }
+
+    public function update(Request $request, Team $current_team, ZoomRecording $recording): RedirectResponse
+    {
+        abort_unless($recording->team_id === $current_team->id, 404);
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'hidden' => ['required', 'boolean'],
+        ]);
+        $recording->update($data);
+
+        if (filled($recording->hls_path)) {
+            UpdateManifest::dispatchSync($recording->id);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Recording updated.')]);
+
+        return back();
+    }
+
+    public function retry(Team $current_team, ZoomRecording $recording, DispatchRecordingPipeline $pipeline): RedirectResponse
+    {
+        abort_unless($recording->team_id === $current_team->id, 404);
+        abort_unless($recording->status === 'failed', 422);
+
+        $pipeline->handle($recording, $recording->failed_step);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Retry queued.')]);
+
+        return back();
+    }
+
+    public function settings(Team $current_team): Response
+    {
+        $settings = ZoomRecordingSetting::forTeam($current_team);
+
+        return Inertia::render('zoom-recordings/Settings', [
+            'settings' => [
+                'r2_prefix' => $settings->r2_prefix,
+                'public_base_url' => $settings->public_base_url,
+                'preferred_recording_type' => $settings->preferred_recording_type,
+                'has_webhook_secret' => filled($settings->webhook_secret),
+                'webhook_url' => route('zoom-recordings.webhook', $current_team->uuid),
+            ],
+        ]);
+    }
+
+    public function updateSettings(Request $request, Team $current_team): RedirectResponse
+    {
+        $data = $request->validate([
+            'webhook_secret' => ['nullable', 'string'],
+            'clear_webhook_secret' => ['sometimes', 'boolean'],
+            'r2_prefix' => ['required', 'string', 'max:255'],
+            'public_base_url' => ['nullable', 'url'],
+            'preferred_recording_type' => ['required', 'string', 'max:255'],
+        ]);
+
+        $settings = ZoomRecordingSetting::forTeam($current_team);
+
+        if ($data['clear_webhook_secret'] ?? false) {
+            $data['webhook_secret'] = null;
+        } elseif (blank($data['webhook_secret'] ?? null)) {
+            unset($data['webhook_secret']);
+        }
+
+        unset($data['clear_webhook_secret']);
+        $settings->update($data);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Recording settings saved.')]);
+
+        return back();
+    }
+}

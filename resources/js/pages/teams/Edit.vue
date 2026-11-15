@@ -11,6 +11,7 @@ import RemoveMemberModal from '@/components/RemoveMemberModal.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -29,6 +30,7 @@ import { useInitials } from '@/composables/useInitials';
 import { edit, index, update } from '@/routes/teams';
 import { update as updateMember } from '@/routes/teams/members';
 import type {
+    CongregationModule,
     RoleOption,
     Team,
     TeamInvitation,
@@ -42,6 +44,7 @@ type Props = {
     invitations: TeamInvitation[];
     permissions: TeamPermissions;
     availableRoles: RoleOption[];
+    modules: CongregationModule[];
 };
 
 const props = defineProps<Props>();
@@ -50,7 +53,7 @@ defineOptions({
     layout: (props: { team: Team }) => ({
         breadcrumbs: [
             {
-                title: 'Teams',
+                title: 'Congregations',
                 href: index(),
             },
             {
@@ -92,6 +95,26 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
     invitationToCancel.value = invitation;
     cancelInvitationDialogOpen.value = true;
 };
+
+const toggleCongregationModule = (moduleKey: string, enabled: boolean) => {
+    router.patch(
+        `/settings/teams/${props.team.slug}/modules`,
+        { module: moduleKey, enabled },
+        { preserveScroll: true },
+    );
+};
+
+const toggleMemberModule = (
+    member: TeamMember,
+    moduleKey: string,
+    enabled: boolean,
+) => {
+    router.patch(
+        `/settings/teams/${props.team.slug}/members/${member.id}/modules`,
+        { module: moduleKey, enabled },
+        { preserveScroll: true },
+    );
+};
 </script>
 
 <template>
@@ -104,8 +127,8 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
         <div v-if="permissions.canUpdateTeam" class="space-y-6">
             <Heading
                 variant="small"
-                title="Team settings"
-                description="Update your team name and settings"
+                title="Congregation settings"
+                description="Update the congregation name and which modules are on"
             />
 
             <Form
@@ -114,7 +137,7 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                 v-slot="{ errors, processing }"
             >
                 <div class="grid gap-2">
-                    <Label for="name">Team name</Label>
+                    <Label for="name">Congregation name</Label>
                     <Input
                         id="name"
                         name="name"
@@ -141,15 +164,39 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
             <Heading variant="small" :title="team.name" />
         </div>
 
+        <div v-if="permissions.canUpdateTeam && modules.length" class="space-y-6">
+            <Heading
+                variant="small"
+                title="Modules"
+                description="Turn modules on or off for the whole congregation"
+            />
+            <div class="space-y-3">
+                <label
+                    v-for="module in modules"
+                    :key="module.key"
+                    class="flex items-center justify-between rounded-lg border p-4"
+                >
+                    <span>{{ module.name }}</span>
+                    <Checkbox
+                        :checked="module.enabled"
+                        @update:checked="
+                            (value: boolean | 'indeterminate') =>
+                                toggleCongregationModule(module.key, value === true)
+                        "
+                    />
+                </label>
+            </div>
+        </div>
+
         <!-- Members Section -->
         <div class="space-y-6">
             <div class="flex items-center justify-between">
                 <Heading
                     variant="small"
-                    title="Team members"
+                    title="Members"
                     :description="
                         permissions.canCreateInvitation
-                            ? 'Manage who belongs to this team'
+                            ? 'Manage who belongs to this congregation'
                             : ''
                     "
                 />
@@ -189,6 +236,34 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                                 {{ member.email }}
                             </div>
                         </div>
+                    </div>
+
+                    <div
+                        v-if="
+                            member.role === 'member' &&
+                            permissions.canUpdateMember &&
+                            modules.length
+                        "
+                        class="flex flex-wrap gap-3"
+                    >
+                        <label
+                            v-for="module in modules.filter((item) => item.enabled)"
+                            :key="module.key"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <Checkbox
+                                :checked="member.modules?.includes(module.key)"
+                                @update:checked="
+                                    (value: boolean | 'indeterminate') =>
+                                        toggleMemberModule(
+                                            member,
+                                            module.key,
+                                            value === true,
+                                        )
+                                "
+                            />
+                            {{ module.name }}
+                        </label>
                     </div>
 
                     <div class="flex items-center gap-2">
@@ -313,7 +388,7 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
         >
             <Heading
                 variant="small"
-                title="Delete team"
+                title="Delete congregation"
                 description="Permanently delete your team"
             />
             <div
@@ -331,7 +406,7 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                     data-test="delete-team-button"
                     variant="destructive"
                     @click="deleteDialogOpen = true"
-                    >Delete team</Button
+                    >Delete congregation</Button
                 >
             </div>
         </div>
@@ -341,6 +416,7 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
         v-if="permissions.canCreateInvitation"
         :team="team"
         :available-roles="availableRoles"
+        :modules="modules"
         :open="inviteDialogOpen"
         @update:open="inviteDialogOpen = $event"
     />

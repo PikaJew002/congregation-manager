@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid } from '@lucide/vue';
+import {
+    BookOpen,
+    FolderGit2,
+    LayoutGrid,
+    Mail,
+    Music,
+    Video,
+} from '@lucide/vue';
+import type { LucideIcon } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
@@ -21,17 +29,43 @@ import type { NavItem } from '@/types';
 
 const page = usePage();
 
-const dashboardUrl = computed(() =>
+let dashboardUrl = computed(() =>
     page.props.currentTeam ? dashboard(page.props.currentTeam.slug).url : '/',
 );
 
-const mainNavItems = computed<NavItem[]>(() => [
-    {
-        title: 'Dashboard',
-        href: dashboardUrl.value,
-        icon: LayoutGrid,
-    },
-]);
+const icons: Record<string, LucideIcon> = {
+    mail: Mail,
+    video: Video,
+    music: Music,
+};
+
+let mainNavItems = computed<NavItem[]>(() => {
+    let items: NavItem[] = [
+        {
+            title: 'Dashboard',
+            href: dashboardUrl.value,
+            icon: LayoutGrid,
+        },
+    ];
+
+    const modules = (page.props.modules ?? []) as Array<{
+        name: string;
+        icon: string;
+        items: Array<{ title: string; href: string }>;
+    }>;
+
+    for (const module of modules) {
+        for (const item of module.items) {
+            items.push({
+                title: item.title,
+                href: item.href,
+                icon: icons[module.icon] ?? LayoutGrid,
+            });
+        }
+    }
+
+    return items;
+});
 
 const footerNavItems: NavItem[] = [
     {
