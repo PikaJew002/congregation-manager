@@ -86,6 +86,47 @@ class OdpInspector
     }
 
     /**
+     * Non-empty text lines on the first slide, ignoring speaker notes.
+     *
+     * @return list<string>
+     */
+    public function firstSlideLines(string $path): array
+    {
+        $zip = new ZipArchive;
+        $zip->open($path);
+        $xml = $zip->getFromName('content.xml') ?: '';
+        $zip->close();
+
+        if ($xml === '') {
+            return [];
+        }
+
+        $dom = new DOMDocument;
+        $dom->loadXML($xml, LIBXML_NONET);
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('draw', 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0');
+        $xpath->registerNamespace('text', 'urn:oasis:names:tc:opendocument:xmlns:text:1.0');
+        $xpath->registerNamespace('presentation', 'urn:oasis:names:tc:opendocument:xmlns:presentation:1.0');
+        $page = $xpath->query('//draw:page[not(ancestor::draw:page)]')?->item(0);
+
+        if (! $page instanceof DOMElement) {
+            return [];
+        }
+
+        $lines = [];
+
+        foreach ($xpath->query('.//text:p[not(ancestor::presentation:notes)] | .//text:h[not(ancestor::presentation:notes)]', $page) ?: [] as $paragraph) {
+            $text = trim(preg_replace('/\s+/u', ' ', $paragraph->textContent) ?? '');
+
+            if ($text !== '') {
+                $lines[] = $text;
+            }
+        }
+
+        return $lines;
+    }
+
+    /**
      * Slides the merged deck will use: trailing empty slides are dropped, as OdpDeckBuilder does.
      *
      * @param  list<array{index: int, label: string, empty: bool, line: string|null}>  $slides

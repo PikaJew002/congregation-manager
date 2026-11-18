@@ -14,6 +14,7 @@ use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
 use App\Modules\ServiceSlides\Support\OdpInspector;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -115,6 +116,81 @@ class ServiceSlidesMcpTest extends TestCase
                 'file' => base64_encode('not an odp'),
             ])
             ->assertHasErrors(['not an ODP']);
+    }
+
+    public function test_a_dropbox_link_can_add_a_library_item(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
+        $owner->withAccessToken($token->accessToken);
+        $bytes = (string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'));
+        $requested = null;
+
+        Http::fake(function ($request) use ($bytes, &$requested) {
+            $requested = $request->url();
+
+            if (str_contains($request->url(), 'preview.odp')) {
+                return Http::response('<!DOCTYPE html><html></html>', 200, ['Content-Type' => 'text/html']);
+            }
+
+            return Http::response($bytes, 200, ['Content-Type' => 'application/octet-stream']);
+        });
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'title' => 'From Dropbox',
+                'kind' => 'song',
+                'url' => 'https://www.dropbox.com/scl/fi/abc/kumi-ori.odp?rlkey=secret&dl=0',
+            ])
+            ->assertOk()
+            ->assertSee('From Dropbox');
+
+        $this->assertIsString($requested);
+        $this->assertStringContainsString('https://www.dropbox.com/scl/fi/abc/kumi-ori.odp', $requested);
+        $this->assertStringContainsString('rlkey=secret', $requested);
+        $this->assertStringContainsString('dl=1', $requested);
+        $this->assertNotNull(SlideSource::query()->where('team_id', $team->id)->where('title', 'From Dropbox')->first());
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'title' => 'Elsewhere',
+                'kind' => 'song',
+                'url' => 'https://example.com/song.odp',
+            ])
+            ->assertHasErrors(['https Dropbox link']);
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'title' => 'Preview',
+                'kind' => 'song',
+                'url' => 'https://www.dropbox.com/scl/fi/abc/preview.odp?dl=0',
+            ])
+            ->assertHasErrors(['web page']);
+
+        Http::assertSentCount(2);
+    }
+
+    public function test_a_missing_title_and_artist_come_from_the_first_slide(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
+        $owner->withAccessToken($token->accessToken);
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'kind' => 'song',
+                'file' => base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'))),
+            ])
+            ->assertOk()
+            ->assertSee('Kumi Ori')
+            ->assertSee('Barry and Batya Segal');
+
+        $source = SlideSource::query()->where('team_id', $team->id)->where('title', 'Kumi Ori')->first();
+
+        $this->assertNotNull($source);
+        $this->assertSame('Barry and Batya Segal', $source->author);
     }
 
     public function test_an_owner_can_create_a_token_for_the_current_congregation(): void
