@@ -25,13 +25,13 @@ A preset is an ordered list of steps. There are two kinds.
 
 ```json
 {
-  "type": "slot",
-  "key": "songs",
-  "label": "Songs",
-  "kind": "song",
-  "repeat": true,
-  "separator_slide_id": 13,
-  "default_source_ids": []
+    "type": "slot",
+    "key": "songs",
+    "label": "Songs",
+    "kind": "song",
+    "repeat": true,
+    "separator_slide_id": 13,
+    "default_source_ids": []
 }
 ```
 
@@ -85,18 +85,21 @@ Files can now be replaced, both library items and templates. Replacing a file re
 ## Screens
 
 **Library**
+
 - Upload or replace an ODP file. The file is accepted only if it is a zip whose `mimetype` entry is `application/vnd.oasis.opendocument.presentation`. A PPTX file is rejected with "Save as ODP in Impress first."
 - The list shows title, kind, slide count, aliases, and where the item was last used.
 - An item can be expanded to show the first line of text on each slide (stored as `slide_lines`).
 - Filter by kind, search by title or alias, archive.
 
 **Templates**
+
 - Upload or replace the file, and edit the name, default kind, and history tracking.
 - Label each slide.
 - Edit the preset as an ordered list of steps: add a template slide, add a slot (key, label, kind, repeat, separator, defaults), reorder, remove.
 - On upload, the app suggests a preset from the slide roles, which the user can then edit.
 
 **Service**
+
 - The page has one tab per deck. "Add deck" picks a template and fills the deck from its preset.
 - Each tab is a drag-to-order list. Template slides appear as small chips, and library items appear as cards with their slide count. Rows that belong to a slot show the slot name.
 - Add a library item: a search box filtered to the slot's kind, with a toggle to show all kinds.
@@ -106,6 +109,7 @@ Files can now be replaced, both library items and templates. Replacing a file re
 - Generate one deck or all decks, download one deck or a zip of all decks.
 
 **History**
+
 - Items from history-tracked templates, with play count and last used date, sortable.
 - A by-date view showing what each service used.
 
