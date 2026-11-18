@@ -7,6 +7,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Modules\ServiceSlides\Mcp\ServiceSlidesServer;
 use App\Modules\ServiceSlides\Mcp\Tools\AddAlias;
+use App\Modules\ServiceSlides\Mcp\Tools\AddLibraryItem;
 use App\Modules\ServiceSlides\Mcp\Tools\SearchLibrary;
 use App\Modules\ServiceSlides\Mcp\Tools\UpsertServiceDeck;
 use App\Modules\ServiceSlides\Models\SlideSource;
@@ -66,6 +67,54 @@ class ServiceSlidesMcpTest extends TestCase
             'team_id' => $team->id,
             'source' => 'mcp',
         ]);
+    }
+
+    public function test_a_congregation_token_can_add_a_library_item(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
+        $owner->withAccessToken($token->accessToken);
+        $file = base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp')));
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'title' => 'Kumi Ori',
+                'kind' => 'song',
+                'author' => 'Traditional',
+                'aliases' => ['Arise'],
+                'file' => $file,
+            ])
+            ->assertOk()
+            ->assertSee('Kumi Ori');
+
+        $source = SlideSource::query()->where('team_id', $team->id)->where('title', 'Kumi Ori')->first();
+
+        $this->assertNotNull($source);
+        $this->assertSame('song', $source->kind);
+        $this->assertSame('Traditional', $source->author);
+        $this->assertGreaterThan(0, $source->slide_count);
+        $this->assertTrue(Storage::disk('files')->exists($source->odp_path));
+        $this->assertDatabaseHas('slide_source_aliases', [
+            'slide_source_id' => $source->id,
+            'alias' => 'Arise',
+        ]);
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'title' => 'Kumi Ori',
+                'kind' => 'song',
+                'file' => $file,
+            ])
+            ->assertHasErrors(['already in this congregation']);
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'title' => 'Notes',
+                'kind' => 'other',
+                'file' => base64_encode('not an odp'),
+            ])
+            ->assertHasErrors(['not an ODP']);
     }
 
     public function test_an_owner_can_create_a_token_for_the_current_congregation(): void
