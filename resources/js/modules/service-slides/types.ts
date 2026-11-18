@@ -132,4 +132,10 @@ export type AccessToken = {
     last_used_at: string | null;
 };
 
+export type OAuthConnection = {
+    id: string;
+    name: string;
+    created_at: string;
+};
+
 export type LibrarySourceOption = Pick<SlideSource, 'id' | 'title' | 'kind'>;

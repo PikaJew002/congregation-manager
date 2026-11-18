@@ -164,7 +164,10 @@ const toggleMemberModule = (
             <Heading variant="small" :title="team.name" />
         </div>
 
-        <div v-if="permissions.canUpdateTeam && modules.length" class="space-y-6">
+        <div
+            v-if="permissions.canUpdateTeam && modules.length"
+            class="space-y-6"
+        >
             <Heading
                 variant="small"
                 title="Modules"
@@ -181,7 +184,10 @@ const toggleMemberModule = (
                         :checked="module.enabled"
                         @update:checked="
                             (value: boolean | 'indeterminate') =>
-                                toggleCongregationModule(module.key, value === true)
+                                toggleCongregationModule(
+                                    module.key,
+                                    value === true,
+                                )
                         "
                     />
                 </label>
@@ -247,7 +253,9 @@ const toggleMemberModule = (
                         class="flex flex-wrap gap-3"
                     >
                         <label
-                            v-for="module in modules.filter((item) => item.enabled)"
+                            v-for="module in modules.filter(
+                                (item) => item.enabled,
+                            )"
                             :key="module.key"
                             class="flex items-center gap-2 text-sm"
                         >

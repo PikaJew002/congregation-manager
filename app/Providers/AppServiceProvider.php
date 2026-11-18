@@ -3,16 +3,24 @@
 namespace App\Providers;
 
 use App\Mail\Transport\MailChannelsTransport;
+use App\Models\Passport\AuthCode;
+use App\Models\Passport\Token;
+use App\Models\Team;
 use App\Models\User;
+use App\Modules\ServiceSlides\Http\Middleware\AssignSlideCongregation;
+use App\Modules\ServiceSlides\Http\Middleware\EnsureOauthUserIsVerified;
 use App\Support\Modules\ModuleAccess;
 use App\Support\Modules\ModuleRegistry;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterval;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Passport\Passport;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -36,6 +44,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
         $this->configureMail();
         $this->configureModuleAccess();
+        $this->configurePassport();
     }
 
     /**
@@ -82,5 +91,36 @@ class AppServiceProvider extends ServiceProvider
 
             return app(ModuleAccess::class)->canUse($user, $team, $key);
         });
+    }
+
+    protected function configurePassport(): void
+    {
+        Passport::tokensCan([
+            'mcp:use' => 'Plan service slides for one congregation',
+        ]);
+        Passport::tokensExpireIn(CarbonInterval::days(15));
+        Passport::refreshTokensExpireIn(CarbonInterval::days(180));
+        Passport::useAuthCodeModel(AuthCode::class);
+        Passport::useTokenModel(Token::class);
+        Passport::authorizationView(function (array $parameters) {
+            $user = $parameters['user'];
+            $teams = $user instanceof User
+                ? $user->teams()->orderBy('name')->get()->filter(
+                    fn (Team $team): bool => app(ModuleAccess::class)->canUse($user, $team, 'service-slides'),
+                )->values()
+                : collect();
+
+            return response()->view('mcp.authorize', [
+                ...$parameters,
+                'teams' => $teams,
+            ]);
+        });
+
+        Route::getRoutes()->getByName('passport.authorizations.authorize')
+            ?->middleware(EnsureOauthUserIsVerified::class);
+        Route::getRoutes()->getByName('passport.authorizations.approve')
+            ?->middleware([EnsureOauthUserIsVerified::class, AssignSlideCongregation::class]);
+        Route::getRoutes()->getByName('passport.authorizations.deny')
+            ?->middleware(EnsureOauthUserIsVerified::class);
     }
 }

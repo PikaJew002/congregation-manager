@@ -54,9 +54,7 @@ defineOptions({
             </TextLink>
             <TextLink
                 v-else
-                :href="
-                    register.url({ query: { invitation: invitation.code } })
-                "
+                :href="register.url({ query: { invitation: invitation.code } })"
             >
                 Create an account for {{ invitation.email }}
             </TextLink>
