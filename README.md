@@ -80,4 +80,6 @@ Allow the website that plays the recordings to read the HLS files. On the public
 
 Upload ODP files only. If a deck is still PowerPoint, open it in Impress and use Save As ODP. The app merges template slides and library items into one ODP per deck. It does not edit slide text.
 
-An agent can call `POST /mcp/services` with a Sanctum token from Slide access. Create the token in that congregation; it is limited to the `service-slides` ability and that congregation id. The tools are `search_library`, `list_templates`, `list_services`, `get_service`, `upsert_service_deck`, `add_alias`, and `generate_deck`.
+An agent can call `POST /mcp/services`. Claude signs in with OAuth: add that URL as a custom connector, then approve one congregation. The server publishes the OAuth discovery documents, dynamic client registration, and PKCE that Claude's connector expects. Run `php artisan passport:keys` once on each server so Passport can issue tokens; the key files stay out of git.
+
+Scripts that cannot open a browser can still send a Sanctum token from Slide access. Create the token in that congregation; it is limited to the `service-slides` ability and that congregation id. The tools are `search-library`, `list-templates`, `list-services`, `get-service`, `upsert-service-deck`, `add-alias`, and `generate-deck`.

@@ -10,12 +10,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDateTime } from '@/lib/format';
 import { settings as settingsRoute } from '@/routes/service-slides';
+import { destroy as destroyConnection } from '@/routes/service-slides/connections';
 import { destroy, store } from '@/routes/service-slides/tokens';
 import type { Team } from '@/types';
-import type { AccessToken } from '../types';
+import type { AccessToken, OAuthConnection } from '../types';
 
 defineProps<{
     tokens: AccessToken[];
+    connections: OAuthConnection[];
     mcpUrl: string;
 }>();
 
@@ -60,6 +62,20 @@ const copy = async (value: string, label: string) => {
     toast.success(`${label} copied.`);
 };
 
+const revokeConnection = (connection: OAuthConnection) => {
+    if (
+        !confirm(
+            `Disconnect “${connection.name}”? It will need to sign in again.`,
+        )
+    ) {
+        return;
+    }
+
+    router.visit(destroyConnection([teamSlug.value, connection.id]), {
+        preserveScroll: true,
+    });
+};
+
 const revoke = (token: AccessToken) => {
     if (
         !confirm(`Revoke “${token.name}”? Agents using it will stop working.`)
@@ -79,14 +95,14 @@ const revoke = (token: AccessToken) => {
     <div class="flex max-w-2xl flex-col space-y-10 p-4">
         <Heading
             title="Slide access"
-            description="Tokens for agents and scripts that plan service decks"
+            description="Connect Claude with the URL below, or create a token for a script"
         />
 
         <section class="space-y-4">
             <Heading
                 variant="small"
                 title="MCP endpoint"
-                description="Point an agent at this URL with a Sanctum token from below."
+                description="In Claude, add a custom connector with this URL. Claude signs in and you choose the congregation."
             />
             <div class="flex gap-2">
                 <Input
@@ -102,6 +118,40 @@ const revoke = (token: AccessToken) => {
                 >
                     <Copy class="h-4 w-4" />
                 </Button>
+            </div>
+        </section>
+
+        <section class="space-y-4">
+            <Heading
+                variant="small"
+                title="Signed-in apps for this congregation"
+            />
+            <p
+                v-if="connections.length === 0"
+                class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
+            >
+                Nothing is signed in yet.
+            </p>
+            <div v-else class="space-y-3">
+                <div
+                    v-for="connection in connections"
+                    :key="connection.id"
+                    class="flex items-center justify-between gap-4 rounded-lg border p-4"
+                >
+                    <div>
+                        <p class="font-medium">{{ connection.name }}</p>
+                        <p class="text-sm text-muted-foreground">
+                            Connected
+                            {{ formatDateTime(connection.created_at) }}
+                        </p>
+                    </div>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        @click="revokeConnection(connection)"
+                        >Disconnect</Button
+                    >
+                </div>
             </div>
         </section>
 
@@ -140,7 +190,11 @@ const revoke = (token: AccessToken) => {
             :options="{ preserveScroll: true }"
             v-slot="{ errors, processing }"
         >
-            <Heading variant="small" title="Create a token" />
+            <Heading
+                variant="small"
+                title="Create a token"
+                description="For a script that cannot open a browser. It stays limited to this congregation."
+            />
             <div class="grid gap-2">
                 <Label for="name">Name</Label>
                 <Input

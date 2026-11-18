@@ -22,7 +22,9 @@ class ServiceSlidesMcpTest extends TestCase
 
     public function test_the_mcp_endpoint_requires_a_token(): void
     {
-        $this->postJson('/mcp/services', [])->assertUnauthorized();
+        $this->postJson('/mcp/services', [])
+            ->assertUnauthorized()
+            ->assertHeader('WWW-Authenticate', 'Bearer realm="mcp", resource_metadata="'.url('/.well-known/oauth-protected-resource/mcp/services').'"');
     }
 
     public function test_a_congregation_token_can_search_and_plan_a_deck(): void

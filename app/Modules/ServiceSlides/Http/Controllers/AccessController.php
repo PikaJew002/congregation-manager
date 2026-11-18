@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Passport\Passport;
 
 class AccessController extends Controller
 {
@@ -22,8 +23,22 @@ class AccessController extends Controller
             'last_used_at' => $token->last_used_at,
         ])->values();
 
+        $connections = Passport::token()->newQuery()
+            ->where('user_id', $request->user()->id)
+            ->where('team_id', $current_team->id)
+            ->where('revoked', false)
+            ->with('client')
+            ->latest()
+            ->get()
+            ->map(fn ($token) => [
+                'id' => $token->id,
+                'name' => $token->client->name,
+                'created_at' => $token->created_at,
+            ])->values();
+
         return Inertia::render('service-slides/Settings', [
             'tokens' => $tokens,
+            'connections' => $connections,
             'mcpUrl' => url('/mcp/services'),
         ]);
     }
@@ -51,6 +66,24 @@ class AccessController extends Controller
             ->delete();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Token revoked.')]);
+
+        return back();
+    }
+
+    public function destroyConnection(Request $request, Team $current_team, string $connection): RedirectResponse
+    {
+        $token = Passport::token()->newQuery()
+            ->whereKey($connection)
+            ->where('user_id', $request->user()->id)
+            ->where('team_id', $current_team->id)
+            ->first();
+
+        if ($token) {
+            $token->refreshToken?->revoke();
+            $token->revoke();
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection revoked.')]);
 
         return back();
     }
