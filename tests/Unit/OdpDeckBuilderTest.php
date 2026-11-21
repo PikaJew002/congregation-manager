@@ -3,6 +3,8 @@
 namespace Tests\Unit;
 
 use App\Modules\ServiceSlides\Support\OdpDeckBuilder;
+use DOMDocument;
+use DOMXPath;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -33,6 +35,7 @@ class OdpDeckBuilderTest extends TestCase
         $this->assertSettingsFollowPages($destination);
         $this->assertIdsAreUnique($destination);
         $this->assertReferencesResolve($destination);
+        $this->assertShapesFitSlide($destination, 11.02431 * 2.54, 6.20139 * 2.54);
     }
 
     public function test_it_slots_liturgy_items_around_a_title_slide(): void
@@ -118,6 +121,30 @@ class OdpDeckBuilderTest extends TestCase
             ));
 
             $this->assertSame([], array_values($missing), "Dangling references in {$file}");
+        }
+    }
+
+    private function assertShapesFitSlide(string $path, float $width, float $height): void
+    {
+        $dom = new DOMDocument;
+        $dom->loadXML($this->documents($path)[0]);
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('draw', 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0');
+        $xpath->registerNamespace('svg', 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0');
+        $centimeters = fn (string $value) => (float) $value * match (preg_replace('/[\d.\-]/', '', $value)) {
+            'in' => 2.54, 'mm' => 0.1, 'pt' => 2.54 / 72, default => 1.0,
+        };
+
+        foreach ($xpath->query('//draw:page/*[@svg:width]') as $shape) {
+            $x = $centimeters($shape->getAttribute('svg:x'));
+            $y = $centimeters($shape->getAttribute('svg:y'));
+            $right = $x + $centimeters($shape->getAttribute('svg:width'));
+            $bottom = $y + $centimeters($shape->getAttribute('svg:height'));
+
+            $this->assertTrue(
+                $x >= -0.05 && $y >= -0.05 && $right <= $width + 0.05 && $bottom <= $height + 0.05,
+                "{$shape->getAttribute('draw:name')} on {$shape->parentNode->getAttribute('draw:name')} spills off the slide.",
+            );
         }
     }
 

@@ -148,10 +148,25 @@ class OdpInspector
         $styles = $zip->getFromName('styles.xml') ?: '';
         $zip->close();
 
-        if (! preg_match('/fo:page-width="([^"]+)".*?fo:page-height="([^"]+)"/s', $styles, $matches)) {
+        $dom = new DOMDocument;
+        if ($styles === '' || ! @$dom->loadXML($styles)) {
             return null;
         }
 
-        return $matches[1].' x '.$matches[2];
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('style', 'urn:oasis:names:tc:opendocument:xmlns:style:1.0');
+        $xpath->registerNamespace('fo', 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0');
+
+        $layout = $xpath->evaluate('string((//style:master-page)[1]/@style:page-layout-name)');
+        $properties = str_contains($layout, "'")
+            ? null
+            : $xpath->query("//style:page-layout[@style:name='{$layout}']/style:page-layout-properties")->item(0);
+        $properties ??= $xpath->query('//style:page-layout-properties')->item(0);
+
+        if (! $properties instanceof DOMElement || ! $properties->hasAttribute('fo:page-width')) {
+            return null;
+        }
+
+        return $properties->getAttribute('fo:page-width').' x '.$properties->getAttribute('fo:page-height');
     }
 }

@@ -592,13 +592,13 @@ class OdpDeckBuilder
      */
     private function scale(?array $template, ?array $source, array &$warnings, string $path): ?float
     {
-        if (! $template || ! $source || $source['width'] == 0.0) {
+        if (! $template || ! $source || $source['width'] == 0.0 || $source['height'] == 0.0) {
             $warnings[] = 'Could not compare page size for '.basename($path).'.';
 
             return null;
         }
 
-        return $template['width'] / $source['width'];
+        return min($template['width'] / $source['width'], $template['height'] / $source['height']);
     }
 
     /**
@@ -606,7 +606,7 @@ class OdpDeckBuilder
      */
     private function pageSize(DOMDocument $styles): ?array
     {
-        $layout = $styles->getElementsByTagNameNS(self::STYLE, 'page-layout-properties')->item(0);
+        $layout = $this->slideLayout($styles)?->getElementsByTagNameNS(self::STYLE, 'page-layout-properties')->item(0);
 
         if (! $layout instanceof DOMElement) {
             return null;
@@ -624,9 +624,25 @@ class OdpDeckBuilder
 
     private function pageLayoutName(DOMDocument $styles): ?string
     {
-        $layout = $styles->getElementsByTagNameNS(self::STYLE, 'page-layout')->item(0);
+        return $this->slideLayout($styles)?->getAttributeNS(self::STYLE, 'name');
+    }
 
-        return $layout instanceof DOMElement ? $layout->getAttributeNS(self::STYLE, 'name') : null;
+    /**
+     * Notes and handout pages have their own page layouts, often listed first; slides use the master page's layout.
+     */
+    private function slideLayout(DOMDocument $styles): ?DOMElement
+    {
+        $layouts = iterator_to_array($styles->getElementsByTagNameNS(self::STYLE, 'page-layout'));
+        $master = $this->first($styles, self::STYLE, 'master-page');
+        $name = $master?->getAttributeNS(self::STYLE, 'page-layout-name');
+
+        foreach ($layouts as $layout) {
+            if ($layout->getAttributeNS(self::STYLE, 'name') === $name) {
+                return $layout;
+            }
+        }
+
+        return $layouts[0] ?? null;
     }
 
     private function toCentimeters(string $value): ?float
