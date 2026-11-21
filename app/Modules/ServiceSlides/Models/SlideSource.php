@@ -12,7 +12,7 @@ class SlideSource extends Model
 
     protected $fillable = [
         'team_id', 'kind', 'title', 'author', 'ccli', 'notes', 'original_path', 'original_format',
-        'odp_path', 'conversion_status', 'slide_count', 'slide_lines', 'page_size', 'file_updated_at', 'archived',
+        'file_path', 'conversion_status', 'slide_count', 'slide_lines', 'page_size', 'file_updated_at', 'archived',
     ];
 
     protected function casts(): array

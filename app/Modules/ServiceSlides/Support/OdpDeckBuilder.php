@@ -5,7 +5,7 @@ namespace App\Modules\ServiceSlides\Support;
 use DOMDocument;
 use DOMElement;
 
-class OdpDeckBuilder
+class OdpDeckBuilder implements DeckBuilder
 {
     use OdpDocument;
 
@@ -17,10 +17,6 @@ class OdpDeckBuilder
 
     private const ID_REFERENCES = ['start-shape', 'end-shape', 'targetElement', 'shape-id'];
 
-    /**
-     * @param  list<array{type: string, index?: int, path?: string, slides?: list<int>}>  $entries
-     * @return list<string>
-     */
     public function build(string $templatePath, array $entries, string $destination): array
     {
         $files = $this->readZip($templatePath);

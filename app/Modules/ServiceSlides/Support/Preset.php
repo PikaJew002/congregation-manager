@@ -75,7 +75,7 @@ class Preset
 
         $validator->after(function ($validator) use ($steps, $template) {
             $keys = [];
-            $sourceIds = SlideSource::query()->forTeam($template->team)->pluck('id')->all();
+            $sourceIds = SlideSource::query()->forTeam($template->team)->where('original_format', $template->format)->pluck('id')->all();
 
             foreach ($steps as $index => $step) {
                 if (($step['type'] ?? null) !== 'slot') {
@@ -90,7 +90,7 @@ class Preset
 
                 foreach ($step['default_source_ids'] ?? [] as $sourceId) {
                     if (! in_array((int) $sourceId, $sourceIds, true)) {
-                        $validator->errors()->add("steps.{$index}.default_source_ids", 'A default item is not in this library.');
+                        $validator->errors()->add("steps.{$index}.default_source_ids", 'A default item is not a '.(SlideFormats::LABELS[$template->format] ?? $template->format).' file in this library.');
                     }
                 }
             }

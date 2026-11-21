@@ -8,7 +8,7 @@ use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Models\ServiceDeckEntry;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideSourceAlias;
-use App\Modules\ServiceSlides\Support\OdpFile;
+use App\Modules\ServiceSlides\Support\PresentationFile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -40,7 +40,7 @@ class LibraryController extends Controller
     {
         $data = $request->validate([
             ...$this->metadataRules(),
-            'file' => ['required', 'file', 'max:102400', new OdpFile],
+            'file' => ['required', 'file', 'max:102400', new PresentationFile],
         ]);
 
         $source = $files->createSource($current_team, $request->file('file'), collect($data)->except('file')->all());
@@ -67,7 +67,7 @@ class LibraryController extends Controller
     public function replaceFile(Request $request, Team $current_team, SlideSource $source, SlideFiles $files): RedirectResponse
     {
         $this->authorizeSource($current_team, $source);
-        $request->validate(['file' => ['required', 'file', 'max:102400', new OdpFile]]);
+        $request->validate(['file' => ['required', 'file', 'max:102400', new PresentationFile($source->original_format)]]);
 
         $files->replaceSource($source, $request->file('file'));
 

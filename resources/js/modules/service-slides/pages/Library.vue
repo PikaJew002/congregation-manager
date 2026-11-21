@@ -158,7 +158,7 @@ const replaceFile = (source: SlideSource, event: Event) => {
     <div class="flex flex-col space-y-10 p-4">
         <Heading
             title="Slide library"
-            description="ODP files for songs, liturgy, and other slides. Save as ODP in Impress first."
+            description="ODP files for songs and PPTX files for liturgy. A deck only uses files in its template's format."
         />
 
         <Form
@@ -171,12 +171,12 @@ const replaceFile = (source: SlideSource, event: Event) => {
             <Heading variant="small" title="Add to library" />
             <div class="grid gap-4 sm:grid-cols-2">
                 <div class="grid gap-2 sm:col-span-2">
-                    <Label for="file">ODP file</Label>
+                    <Label for="file">ODP or PPTX file</Label>
                     <Input
                         id="file"
                         type="file"
                         name="file"
-                        accept=".odp"
+                        accept=".odp,.pptx"
                         required
                     />
                     <InputError :message="errors.file" />
@@ -277,6 +277,9 @@ const replaceFile = (source: SlideSource, event: Event) => {
                                 }}</span>
                                 <Badge variant="secondary">{{
                                     kinds[source.kind] ?? source.kind
+                                }}</Badge>
+                                <Badge variant="outline">{{
+                                    source.original_format.toUpperCase()
                                 }}</Badge>
                                 <Badge v-if="source.archived" variant="outline"
                                     >Archived</Badge
@@ -380,7 +383,7 @@ const replaceFile = (source: SlideSource, event: Event) => {
                                 {{ uploading ? 'Uploading…' : 'Replace file' }}
                                 <input
                                     type="file"
-                                    accept=".odp"
+                                    :accept="`.${source.original_format}`"
                                     class="sr-only"
                                     @change="replaceFile(source, $event)"
                                 />

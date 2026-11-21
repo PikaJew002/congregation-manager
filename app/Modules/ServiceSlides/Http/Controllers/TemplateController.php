@@ -8,7 +8,7 @@ use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
 use App\Modules\ServiceSlides\Models\SlideTemplateSlide;
-use App\Modules\ServiceSlides\Support\OdpFile;
+use App\Modules\ServiceSlides\Support\PresentationFile;
 use App\Modules\ServiceSlides\Support\Preset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,7 +28,7 @@ class TemplateController extends Controller
 
         return Inertia::render('service-slides/Templates', [
             'templates' => $templates,
-            'sources' => SlideSource::query()->forTeam($current_team)->where('archived', false)->orderBy('title')->get(['id', 'title', 'kind']),
+            'sources' => SlideSource::query()->forTeam($current_team)->where('archived', false)->orderBy('title')->get(['id', 'title', 'kind', 'original_format']),
             'kinds' => config('modules.slide_kinds'),
         ]);
     }
@@ -37,7 +37,7 @@ class TemplateController extends Controller
     {
         $data = $request->validate([
             ...$this->metadataRules(),
-            'file' => ['required', 'file', 'max:102400', new OdpFile],
+            'file' => ['required', 'file', 'max:102400', new PresentationFile],
         ]);
 
         $template = $files->createTemplate($current_team, $request->file('file'), [
@@ -80,7 +80,7 @@ class TemplateController extends Controller
     public function replaceFile(Request $request, Team $current_team, SlideTemplate $template, SlideFiles $files): RedirectResponse
     {
         $this->authorizeTemplate($current_team, $template);
-        $request->validate(['file' => ['required', 'file', 'max:102400', new OdpFile]]);
+        $request->validate(['file' => ['required', 'file', 'max:102400', new PresentationFile($template->format)]]);
 
         $files->replaceTemplate($template, $request->file('file'));
         $missing = $template->slides()->where('missing', true)->count();

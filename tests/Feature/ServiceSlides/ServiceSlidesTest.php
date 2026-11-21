@@ -10,6 +10,7 @@ use App\Modules\ServiceSlides\Jobs\GenerateServiceDeck;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
 use App\Modules\ServiceSlides\Support\OdpInspector;
+use App\Modules\ServiceSlides\Support\PptxInspector;
 use App\Support\Modules\ModuleAccess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -28,7 +29,7 @@ class ServiceSlidesTest extends TestCase
         $this->withoutVite();
     }
 
-    public function test_powerpoint_uploads_are_rejected(): void
+    public function test_files_that_are_not_presentations_are_rejected(): void
     {
         [$team, $owner] = $this->owner();
 
@@ -36,9 +37,109 @@ class ServiceSlidesTest extends TestCase
             ->post(route('service-slides.library.store', $team), [
                 'title' => 'Psalm',
                 'kind' => 'liturgy',
-                'file' => UploadedFile::fake()->create('psalm.pptx', 20, 'application/vnd.openxmlformats-officedocument.presentationml.presentation'),
+                'file' => UploadedFile::fake()->create('psalm.pptx', 20, PptxInspector::MIMETYPE),
             ])
-            ->assertSessionHasErrors('file');
+            ->assertSessionHasErrors(['file' => 'Upload an ODP or PPTX presentation.']);
+
+        $legacy = tempnam(sys_get_temp_dir(), 'upload-');
+        file_put_contents($legacy, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1".str_repeat("\0", 512));
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), [
+                'title' => 'Psalm',
+                'kind' => 'liturgy',
+                'file' => new UploadedFile($legacy, 'psalm.ppt', 'application/vnd.ms-powerpoint', null, true),
+            ])
+            ->assertSessionHasErrors(['file' => 'This is an old PowerPoint file (.ppt). Save it as PPTX first.']);
+    }
+
+    public function test_powerpoint_liturgy_is_stored_as_uploaded_and_replaced_only_with_powerpoint(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), ['title' => 'Kaddish', 'kind' => 'liturgy', 'file' => $this->upload('kaddish.pptx')])
+            ->assertSessionHasNoErrors();
+
+        $source = SlideSource::query()->where('title', 'Kaddish')->firstOrFail();
+        $this->assertSame('pptx', $source->original_format);
+        $this->assertSame($source->original_path, $source->file_path);
+        $this->assertStringEndsWith('.pptx', $source->file_path);
+        $this->assertSame(3, $source->slide_count);
+        $this->assertStringStartsWith('Mourner’s Kaddish', $source->slide_lines[0]);
+        $this->assertSame('33.867cm x 19.05cm', $source->page_size);
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.file', [$team, $source]), ['file' => $this->upload('psalm-19.odp')])
+            ->assertSessionHasErrors(['file' => 'This uses a PPTX file, so the replacement must be PPTX too.']);
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.file', [$team, $source]), ['file' => $this->upload('adon-olam.pptx')])
+            ->assertSessionHasNoErrors();
+        $this->assertStringStartsWith('Adon Olam', $source->fresh()->slide_lines[0]);
+    }
+
+    public function test_a_powerpoint_template_builds_a_powerpoint_deck_from_powerpoint_items_only(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.templates.store', $team), ['name' => 'Liturgy', 'default_kind' => 'liturgy', 'file' => $this->upload('liturgy-service.pptx')])
+            ->assertSessionHasNoErrors();
+        $template = SlideTemplate::query()->where('name', 'Liturgy')->firstOrFail();
+        $this->assertSame('pptx', $template->format);
+        $this->assertCount(55, $template->slides);
+
+        $slides = $template->slides->keyBy('slide_index');
+        $template->update(['preset' => [
+            ['type' => 'template_slide', 'slide_id' => $slides[0]->id],
+            ['type' => 'slot', 'key' => 'items', 'label' => 'Items', 'kind' => 'liturgy', 'repeat' => true, 'separator_slide_id' => null, 'default_source_ids' => []],
+            ['type' => 'template_slide', 'slide_id' => $slides[54]->id],
+        ]]);
+
+        $odpBarchu = $this->source($team, 'psalm-19.odp', 'Barchu');
+        foreach (['barchu.pptx' => 'Barchu', 'modim.pptx' => 'Modim', 'adon-olam.pptx' => 'Adon Olam'] as $fixture => $title) {
+            $this->actingAs($owner)
+                ->post(route('service-slides.library.store', $team), ['title' => $title, 'kind' => 'liturgy', 'file' => $this->upload($fixture)])
+                ->assertSessionHasNoErrors();
+        }
+
+        $result = app(ServicePlanner::class)->upsert($team, '2026-11-14', 'Liturgy', ['Barchu', 'Modim', 'Adon Olam', 'Kumi Ori']);
+        $this->assertSame(['items' => ['Kumi Ori']], $result['unmatched']);
+
+        $deck = $result['deck'];
+        $this->assertFalse($deck->entries()->where('slide_source_id', $odpBarchu->id)->exists());
+
+        GenerateServiceDeck::dispatchSync($deck->id);
+        $deck->refresh();
+        $this->assertSame('ready', $deck->status);
+        $this->assertSame([], $deck->warnings);
+        $this->assertStringEndsWith('.pptx', $deck->generated_path);
+
+        $local = tempnam(sys_get_temp_dir(), 'deck-');
+        file_put_contents($local, Storage::disk('files')->get($deck->generated_path));
+        $lines = array_map(fn (array $slide) => $slide['line'], app(PptxInspector::class)->slides($local));
+        @unlink($local);
+
+        $this->assertCount(10, $lines);
+        $this->assertStringStartsWith('Psalm 29', $lines[0]);
+        $this->assertStringStartsWith('Barchu', $lines[1]);
+        $this->assertStringStartsWith('Modim', $lines[3]);
+        $this->assertStringStartsWith('Adon Olam', $lines[6]);
+        $this->assertNull($lines[9]);
+
+        $this->actingAs($owner)
+            ->get(route('service-slides.decks.download', [$team, $deck]))
+            ->assertOk()
+            ->assertDownload('2026-11-14 Liturgy.pptx');
+
+        $this->actingAs($owner)
+            ->put(route('service-slides.decks.entries', [$team, $deck]), ['entries' => [
+                ['entry_type' => 'source', 'slide_source_id' => $odpBarchu->id],
+            ]])
+            ->assertSessionHasErrors(['entries.0.slide_source_id' => 'This deck uses PPTX files, so every library item in it must be PPTX.']);
     }
 
     public function test_uploaded_songs_are_formatted_and_keep_the_original(): void
@@ -54,18 +155,18 @@ class ServiceSlidesTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $song = SlideSource::query()->where('title', 'Kumi Ori')->firstOrFail();
-        $this->assertNotSame($song->original_path, $song->odp_path);
+        $this->assertNotSame($song->original_path, $song->file_path);
         $this->assertSame(file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp')), Storage::disk('files')->get($song->original_path));
-        $this->assertNotSame(Storage::disk('files')->get($song->original_path), Storage::disk('files')->get($song->odp_path));
+        $this->assertNotSame(Storage::disk('files')->get($song->original_path), Storage::disk('files')->get($song->file_path));
 
         $liturgy = SlideSource::query()->where('title', 'Psalm 19')->firstOrFail();
-        $this->assertSame($liturgy->original_path, $liturgy->odp_path);
+        $this->assertSame($liturgy->original_path, $liturgy->file_path);
 
-        $formatted = $song->odp_path;
+        $formatted = $song->file_path;
         $this->actingAs($owner)
             ->put(route('service-slides.library.update', [$team, $song]), ['title' => 'Kumi Ori', 'kind' => 'other'])
             ->assertSessionHasNoErrors();
-        $this->assertSame($song->original_path, $song->fresh()->odp_path);
+        $this->assertSame($song->original_path, $song->fresh()->file_path);
         Storage::disk('files')->assertMissing($formatted);
     }
 
@@ -78,9 +179,9 @@ class ServiceSlidesTest extends TestCase
         $this->artisan('service-slides:format-songs')->assertSuccessful();
 
         $song->refresh();
-        $this->assertNotSame($song->original_path, $song->odp_path);
+        $this->assertNotSame($song->original_path, $song->file_path);
         Storage::disk('files')->assertExists($song->original_path);
-        Storage::disk('files')->assertExists($song->odp_path);
+        Storage::disk('files')->assertExists($song->file_path);
     }
 
     public function test_a_deck_merges_template_slides_and_library_files(): void
@@ -167,7 +268,7 @@ class ServiceSlidesTest extends TestCase
         $template = SlideTemplate::query()->create([
             'team_id' => $team->id,
             'name' => $name,
-            'odp_path' => $path,
+            'file_path' => $path,
             'page_size' => $inspector->pageSize($local),
             'default_kind' => 'song',
             'is_history_tracked' => $history,
@@ -189,7 +290,9 @@ class ServiceSlidesTest extends TestCase
         $path = tempnam(sys_get_temp_dir(), 'upload-');
         copy(base_path('tests/Fixtures/slides/'.$fixture), $path);
 
-        return new UploadedFile($path, $fixture, OdpInspector::MIMETYPE, null, true);
+        $mimeType = str_ends_with($fixture, '.pptx') ? PptxInspector::MIMETYPE : OdpInspector::MIMETYPE;
+
+        return new UploadedFile($path, $fixture, $mimeType, null, true);
     }
 
     private function source(Team $team, string $fixture, string $title): SlideSource
@@ -202,7 +305,7 @@ class ServiceSlidesTest extends TestCase
             'kind' => 'song',
             'title' => $title,
             'original_path' => $path,
-            'odp_path' => $path,
+            'file_path' => $path,
             'slide_count' => 1,
         ]);
     }

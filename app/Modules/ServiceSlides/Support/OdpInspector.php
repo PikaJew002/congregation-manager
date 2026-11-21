@@ -7,39 +7,10 @@ use DOMElement;
 use DOMXPath;
 use ZipArchive;
 
-class OdpInspector
+class OdpInspector implements SlideInspector
 {
     public const MIMETYPE = 'application/vnd.oasis.opendocument.presentation';
 
-    /**
-     * Returns null when the file is an ODP presentation, or a message explaining why it is not.
-     */
-    public function rejection(string $path): ?string
-    {
-        $zip = new ZipArchive;
-
-        if ($zip->open($path) !== true) {
-            return 'This is not an ODP file. Save it as ODP in Impress first.';
-        }
-
-        $mimetype = $zip->getFromName('mimetype');
-        $isPowerPoint = $zip->locateName('[Content_Types].xml') !== false || $zip->locateName('ppt/presentation.xml') !== false;
-        $zip->close();
-
-        if ($isPowerPoint) {
-            return 'Save as ODP in Impress first.';
-        }
-
-        if ($mimetype === false || trim($mimetype) !== self::MIMETYPE) {
-            return 'This is not an ODP presentation. Save it as ODP in Impress first.';
-        }
-
-        return null;
-    }
-
-    /**
-     * @return list<array{index: int, label: string, empty: bool, line: string|null}>
-     */
     public function slides(string $path): array
     {
         $zip = new ZipArchive;
@@ -85,11 +56,6 @@ class OdpInspector
         return $slides;
     }
 
-    /**
-     * Non-empty text lines on the first slide, ignoring speaker notes.
-     *
-     * @return list<string>
-     */
     public function firstSlideLines(string $path): array
     {
         $zip = new ZipArchive;
@@ -126,12 +92,6 @@ class OdpInspector
         return $lines;
     }
 
-    /**
-     * Slides the merged deck will use: trailing empty slides are dropped, as OdpDeckBuilder does.
-     *
-     * @param  list<array{index: int, label: string, empty: bool, line: string|null}>  $slides
-     * @return list<array{index: int, label: string, empty: bool, line: string|null}>
-     */
     public function usedSlides(array $slides): array
     {
         while ($slides !== [] && end($slides)['empty']) {

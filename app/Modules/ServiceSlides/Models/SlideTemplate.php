@@ -11,7 +11,7 @@ class SlideTemplate extends Model
     use BelongsToTeam;
 
     protected $fillable = [
-        'team_id', 'name', 'odp_path', 'page_size', 'default_kind', 'is_history_tracked', 'preset', 'file_updated_at',
+        'team_id', 'name', 'file_path', 'format', 'page_size', 'default_kind', 'is_history_tracked', 'preset', 'file_updated_at',
     ];
 
     protected function casts(): array

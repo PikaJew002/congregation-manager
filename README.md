@@ -52,7 +52,7 @@ Create a MySQL database. Create an R2 bucket for public recordings and, if you w
 
 - `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`, `R2_REGION`
 - `R2_BUCKET` and `R2_PUBLIC_URL` for the public recording disk
-- `R2_FILES_BUCKET` for private ODP files and generated decks. It falls back to `R2_BUCKET` when unset.
+- `R2_FILES_BUCKET` for private slide files and generated decks. It falls back to `R2_BUCKET` when unset.
 
 Weekly email uses the `mailchannels` mailer even when `MAIL_MAILER` stays `log`. Set `MAILCHANNELS_API_KEY`, `MAILCHANNELS_DKIM_DOMAIN`, `MAILCHANNELS_DKIM_SELECTOR`, and `MAILCHANNELS_DKIM_PRIVATE_KEY`. Publish the matching DKIM TXT record at `{selector}._domainkey.{domain}`. Add the MailChannels domain lockdown TXT record (`_mailchannels`) so only this account can send for that domain.
 
@@ -78,8 +78,8 @@ Allow the website that plays the recordings to read the HLS files. On the public
 
 ## Service slides
 
-Upload ODP files only. If a deck is still PowerPoint, open it in Impress and use Save As ODP. The app merges template slides and library items into one ODP per deck. It does not edit slide text.
+Upload ODP files for songs (saved from Impress) and PPTX files for liturgy (saved from PowerPoint). A template is one or the other, and its decks only take library items in the same format. The app merges template slides and library items into one file per deck, in the template's format. It does not edit slide text.
 
 An agent can call `POST /mcp/services`. Claude signs in with OAuth: add that URL as a custom connector, then approve one congregation. The server publishes the OAuth discovery documents, dynamic client registration, and PKCE that Claude's connector expects. Run `php artisan passport:keys` once on each server so Passport can issue tokens; the key files stay out of git.
 
-Scripts that cannot open a browser can still send a Sanctum token from Slide access. Create the token in that congregation; it is limited to the `service-slides` ability and that congregation id. The tools are `search-library`, `list-templates`, `list-services`, `get-service`, `upsert-service-deck`, `add-alias`, `add-library-item`, and `generate-deck`. `add-library-item` stores an ODP in the connected congregation's library from base64 or a Dropbox link.
+Scripts that cannot open a browser can still send a Sanctum token from Slide access. Create the token in that congregation; it is limited to the `service-slides` ability and that congregation id. The tools are `search-library`, `list-templates`, `list-services`, `get-service`, `upsert-service-deck`, `add-alias`, `add-library-item`, and `generate-deck`. `add-library-item` stores an ODP or PPTX file in the connected congregation's library from base64 or a Dropbox link.
