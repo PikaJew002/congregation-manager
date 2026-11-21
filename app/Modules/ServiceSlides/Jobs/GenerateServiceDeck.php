@@ -49,7 +49,7 @@ class GenerateServiceDeck implements ShouldQueue
                 if ($entry->entry_type === 'source' && $entry->source) {
                     $sourcePath = $work.'/source-'.$entry->id.'.odp';
                     file_put_contents($sourcePath, Storage::disk('files')->get($entry->source->odp_path));
-                    $entries[] = ['type' => 'source', 'path' => $sourcePath, 'music' => $entry->source->kind === 'song'];
+                    $entries[] = ['type' => 'source', 'path' => $sourcePath];
                 }
             }
 

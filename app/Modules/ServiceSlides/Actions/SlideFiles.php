@@ -8,13 +8,17 @@ use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
 use App\Modules\ServiceSlides\Support\OdpInspector;
 use App\Modules\ServiceSlides\Support\Preset;
+use App\Modules\ServiceSlides\Support\SongSlideFormatter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Throwable;
 
 class SlideFiles
 {
-    public function __construct(private OdpInspector $inspector, private Preset $preset) {}
+    public function __construct(private OdpInspector $inspector, private Preset $preset, private SongSlideFormatter $formatter) {}
 
     /**
      * @param  array<string, mixed>  $attributes
@@ -23,7 +27,7 @@ class SlideFiles
     {
         return SlideSource::query()->create([
             ...$attributes,
-            ...$this->sourceFileAttributes($team, $file),
+            ...$this->sourceFileAttributes($team, $file, $attributes['kind'] ?? 'song'),
             'team_id' => $team->id,
             'original_format' => 'odp',
             'conversion_status' => 'ready',
@@ -32,18 +36,49 @@ class SlideFiles
 
     public function replaceSource(SlideSource $source, UploadedFile $file): void
     {
-        $old = $source->odp_path;
-        $source->update($this->sourceFileAttributes($source->team, $file));
-        $this->deleteIfUnused($old, $source->odp_path);
+        $old = [$source->original_path, $source->odp_path];
+        $source->update($this->sourceFileAttributes($source->team, $file, $source->kind));
+        foreach (array_unique($old) as $path) {
+            $this->deleteIfUnused($path, $source->original_path, $source->odp_path);
+        }
 
-        ServiceDeck::query()->usingSource($source->id)->each(fn (ServiceDeck $deck) => $deck->markStale());
+        $this->markDecksStale($source);
+    }
+
+    /**
+     * Rebuilds the file decks use from the uploaded original, so song layout fixes reach items added before them
+     * and follow a change of kind.
+     *
+     * @return list<string>
+     */
+    public function reformatSource(SlideSource $source): array
+    {
+        $old = $source->odp_path;
+        $notes = [];
+        $path = $source->original_path;
+
+        if ($source->kind === 'song') {
+            $local = tempnam(sys_get_temp_dir(), 'library-odp-');
+            file_put_contents($local, Storage::disk('files')->get($source->original_path));
+            try {
+                [$path, $notes] = $this->formatSong($source->team_id, $local, $source->original_path);
+            } finally {
+                @unlink($local);
+            }
+        }
+
+        $source->update(['odp_path' => $path]);
+        $this->deleteIfUnused($old, $source->original_path, $path);
+        $this->markDecksStale($source);
+
+        return $notes;
     }
 
     public function setArchived(SlideSource $source, bool $archived): void
     {
         $source->update(['archived' => $archived]);
 
-        ServiceDeck::query()->usingSource($source->id)->each(fn (ServiceDeck $deck) => $deck->markStale());
+        $this->markDecksStale($source);
     }
 
     /**
@@ -109,20 +144,49 @@ class SlideFiles
     /**
      * @return array<string, mixed>
      */
-    private function sourceFileAttributes(Team $team, UploadedFile $file): array
+    private function sourceFileAttributes(Team $team, UploadedFile $file, string $kind): array
     {
         $local = $file->getRealPath();
         $slides = $this->inspector->usedSlides($this->inspector->slides($local));
-        $path = $file->store('slides/'.$team->id, 'files');
+        $original = $file->store('slides/'.$team->id, 'files');
 
         return [
-            'original_path' => $path,
-            'odp_path' => $path,
+            'original_path' => $original,
+            'odp_path' => $kind === 'song' ? $this->formatSong($team->id, $local, $original)[0] : $original,
             'slide_count' => count($slides),
             'slide_lines' => array_map(fn (array $slide) => $slide['line'], $slides),
             'page_size' => $this->inspector->pageSize($local),
             'file_updated_at' => now(),
         ];
+    }
+
+    /**
+     * Stores a formatted copy of the song, or falls back to the original when the file cannot be formatted.
+     *
+     * @return array{0: string, 1: list<string>}
+     */
+    private function formatSong(int $teamId, string $local, string $original): array
+    {
+        $formatted = tempnam(sys_get_temp_dir(), 'library-song-');
+
+        try {
+            $notes = $this->formatter->format($local, $formatted);
+            $path = 'slides/'.$teamId.'/'.Str::random(40).'.odp';
+            Storage::disk('files')->put($path, file_get_contents($formatted));
+
+            return [$path, $notes];
+        } catch (Throwable $exception) {
+            Log::warning('Song slides could not be formatted.', ['path' => $original, 'error' => $exception->getMessage()]);
+
+            return [$original, ['The file could not be formatted, so it is used as uploaded.']];
+        } finally {
+            @unlink($formatted);
+        }
+    }
+
+    private function markDecksStale(SlideSource $source): void
+    {
+        ServiceDeck::query()->usingSource($source->id)->each(fn (ServiceDeck $deck) => $deck->markStale());
     }
 
     /**
@@ -137,9 +201,9 @@ class SlideFiles
         ];
     }
 
-    private function deleteIfUnused(?string $old, string $new): void
+    private function deleteIfUnused(?string $old, string ...$current): void
     {
-        if ($old && $old !== $new) {
+        if ($old && ! in_array($old, $current, true)) {
             Storage::disk('files')->delete($old);
         }
     }

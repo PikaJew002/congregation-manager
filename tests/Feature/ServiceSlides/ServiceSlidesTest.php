@@ -41,6 +41,48 @@ class ServiceSlidesTest extends TestCase
             ->assertSessionHasErrors('file');
     }
 
+    public function test_uploaded_songs_are_formatted_and_keep_the_original(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), ['title' => 'Kumi Ori', 'kind' => 'song', 'file' => $this->upload('kumi-ori.odp')])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), ['title' => 'Psalm 19', 'kind' => 'liturgy', 'file' => $this->upload('psalm-19.odp')])
+            ->assertSessionHasNoErrors();
+
+        $song = SlideSource::query()->where('title', 'Kumi Ori')->firstOrFail();
+        $this->assertNotSame($song->original_path, $song->odp_path);
+        $this->assertSame(file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp')), Storage::disk('files')->get($song->original_path));
+        $this->assertNotSame(Storage::disk('files')->get($song->original_path), Storage::disk('files')->get($song->odp_path));
+
+        $liturgy = SlideSource::query()->where('title', 'Psalm 19')->firstOrFail();
+        $this->assertSame($liturgy->original_path, $liturgy->odp_path);
+
+        $formatted = $song->odp_path;
+        $this->actingAs($owner)
+            ->put(route('service-slides.library.update', [$team, $song]), ['title' => 'Kumi Ori', 'kind' => 'other'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame($song->original_path, $song->fresh()->odp_path);
+        Storage::disk('files')->assertMissing($formatted);
+    }
+
+    public function test_the_format_command_formats_songs_added_before_import_formatting(): void
+    {
+        Storage::fake('files');
+        [$team] = $this->owner();
+        $song = $this->source($team, 'trees-of-the-field.odp', 'Trees of the Field');
+
+        $this->artisan('service-slides:format-songs')->assertSuccessful();
+
+        $song->refresh();
+        $this->assertNotSame($song->original_path, $song->odp_path);
+        Storage::disk('files')->assertExists($song->original_path);
+        Storage::disk('files')->assertExists($song->odp_path);
+    }
+
     public function test_a_deck_merges_template_slides_and_library_files(): void
     {
         Storage::fake('files');
@@ -140,6 +182,14 @@ class ServiceSlidesTest extends TestCase
         }
 
         return $template;
+    }
+
+    private function upload(string $fixture): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'upload-');
+        copy(base_path('tests/Fixtures/slides/'.$fixture), $path);
+
+        return new UploadedFile($path, $fixture, OdpInspector::MIMETYPE, null, true);
     }
 
     private function source(Team $team, string $fixture, string $title): SlideSource
