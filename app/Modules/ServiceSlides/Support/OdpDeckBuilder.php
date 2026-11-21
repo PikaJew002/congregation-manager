@@ -21,6 +21,20 @@ class OdpDeckBuilder
 
     private const FO = 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0';
 
+    private const PRESENTATION = 'urn:oasis:names:tc:opendocument:xmlns:presentation:1.0';
+
+    private const TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
+
+    private const NUMBER = 'urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0';
+
+    private const XML = 'http://www.w3.org/XML/1998/namespace';
+
+    private const OFFICE_SECTIONS = ['scripts', 'font-face-decls', 'styles', 'automatic-styles', 'master-styles', 'body'];
+
+    private const ID_ATTRIBUTES = [self::DRAW => 'draw:id', self::XML => 'xml:id'];
+
+    private const ID_REFERENCES = ['start-shape', 'end-shape', 'targetElement', 'shape-id'];
+
     /**
      * @param  list<array{type: string, index?: int, path?: string, slides?: list<int>}>  $entries
      * @return list<string>
@@ -72,6 +86,7 @@ class OdpDeckBuilder
         }
 
         $this->replacePages($content, $pages);
+        $this->uniquifyIds($content, $styles);
         $files['content.xml'] = $content->saveXML();
         $files['styles.xml'] = $styles->saveXML();
         $files['META-INF/manifest.xml'] = $this->manifest($files);
@@ -127,6 +142,7 @@ class OdpDeckBuilder
         $this->rewriteImages($sourceStyles, $sourceFiles, $files, $imageHashes);
         $this->importAutomaticStyles($sourceContent, $content);
         $this->importAutomaticStyles($sourceStyles, $styles);
+        $this->importCommonStyles($sourceStyles, $styles);
         $this->importMasters($sourceContent, $sourceStyles, $styles, $masterHashes, $masterContentHashes, $prefix, $this->pageLayoutName($styles));
         $this->importFonts($sourceContent, $content);
         $this->importFonts($sourceStyles, $styles);
@@ -198,14 +214,12 @@ class OdpDeckBuilder
         $names = [];
         foreach ([$content, $styles] as $dom) {
             foreach ($dom->getElementsByTagName('*') as $element) {
-                if (! $element instanceof DOMElement) {
+                if (! $element instanceof DOMElement || ! $attribute = $this->nameAttribute($element)) {
                     continue;
                 }
-                if (in_array($element->localName, ['style', 'master-page', 'page-layout', 'font-face'], true)) {
-                    $name = $element->getAttributeNS(self::STYLE, 'name');
-                    if ($name !== '') {
-                        $names[$name] = $name;
-                    }
+                $name = $element->getAttributeNS($attribute[0], 'name');
+                if ($name !== '') {
+                    $names[$name] = $name;
                 }
             }
         }
@@ -214,17 +228,35 @@ class OdpDeckBuilder
     }
 
     /**
+     * @return array{0: string, 1: string}|null
+     */
+    private function nameAttribute(DOMElement $element): ?array
+    {
+        return match (true) {
+            $element->namespaceURI === self::STYLE
+                && in_array($element->localName, ['style', 'master-page', 'page-layout', 'font-face', 'presentation-page-layout'], true),
+            $element->namespaceURI === self::TEXT && $element->localName === 'list-style',
+            $element->namespaceURI === self::NUMBER && str_ends_with($element->localName, '-style') => [self::STYLE, 'style:name'],
+            $element->namespaceURI === self::DRAW
+                && in_array($element->localName, ['gradient', 'hatch', 'fill-image', 'marker', 'stroke-dash', 'opacity'], true),
+            $element->namespaceURI === self::SVG
+                && in_array($element->localName, ['linearGradient', 'radialGradient'], true) => [self::DRAW, 'draw:name'],
+            default => null,
+        };
+    }
+
+    /**
      * @param  array<string, string>  $renames
      */
     private function renameDefinedNames(DOMDocument $dom, array $renames): void
     {
         foreach ($dom->getElementsByTagName('*') as $element) {
-            if (! $element instanceof DOMElement) {
+            if (! $element instanceof DOMElement || ! $attribute = $this->nameAttribute($element)) {
                 continue;
             }
-            $name = $element->getAttributeNS(self::STYLE, 'name');
-            if ($name !== '' && isset($renames[$name]) && in_array($element->localName, ['style', 'master-page', 'page-layout', 'font-face'], true)) {
-                $element->setAttributeNS(self::STYLE, 'style:name', $renames[$name]);
+            $name = $element->getAttributeNS($attribute[0], 'name');
+            if (isset($renames[$name])) {
+                $element->setAttributeNS($attribute[0], $attribute[1], $renames[$name]);
             }
         }
     }
@@ -241,6 +273,12 @@ class OdpDeckBuilder
             'parent-style-name',
             'page-layout-name',
             'fill-image-name',
+            'fill-gradient-name',
+            'fill-hatch-name',
+            'marker-start',
+            'marker-end',
+            'stroke-dash',
+            'opacity-name',
             'list-style-name',
             'font-name',
             'data-style-name',
@@ -273,6 +311,22 @@ class OdpDeckBuilder
 
         foreach (iterator_to_array($sourceStyles->childNodes) as $child) {
             if ($child instanceof DOMElement) {
+                $targetStyles->appendChild($target->importNode($child, true));
+            }
+        }
+    }
+
+    private function importCommonStyles(DOMDocument $source, DOMDocument $target): void
+    {
+        $sourceStyles = $this->first($source, self::OFFICE, 'styles');
+
+        if (! $sourceStyles) {
+            return;
+        }
+
+        $targetStyles = $this->section($target, 'styles');
+        foreach (iterator_to_array($sourceStyles->childNodes) as $child) {
+            if ($child instanceof DOMElement && $this->nameAttribute($child)) {
                 $targetStyles->appendChild($target->importNode($child, true));
             }
         }
@@ -365,12 +419,12 @@ class OdpDeckBuilder
     private function importFonts(DOMDocument $source, DOMDocument $target): void
     {
         $sourceFonts = $this->first($source, self::OFFICE, 'font-face-decls');
-        $targetFonts = $this->first($target, self::OFFICE, 'font-face-decls');
 
-        if (! $sourceFonts || ! $targetFonts) {
+        if (! $sourceFonts) {
             return;
         }
 
+        $targetFonts = $this->section($target, 'font-face-decls');
         $existing = [];
         foreach ($targetFonts->getElementsByTagNameNS(self::STYLE, 'font-face') as $font) {
             $existing[$font->getAttributeNS(self::STYLE, 'name')] = true;
@@ -396,7 +450,12 @@ class OdpDeckBuilder
      */
     private function rewriteImages(DOMDocument $dom, array $sourceFiles, array &$files, array &$imageHashes): void
     {
-        foreach ($dom->getElementsByTagNameNS(self::DRAW, 'image') as $image) {
+        $images = [
+            ...iterator_to_array($dom->getElementsByTagNameNS(self::DRAW, 'image')),
+            ...iterator_to_array($dom->getElementsByTagNameNS(self::DRAW, 'fill-image')),
+        ];
+
+        foreach ($images as $image) {
             $href = $image->getAttributeNS(self::XLINK, 'href');
             if ($href === '' || ! isset($sourceFiles[$href])) {
                 continue;
@@ -421,18 +480,92 @@ class OdpDeckBuilder
     {
         $existing = $this->pages($content);
         $parent = $existing[0]->parentNode ?? $this->first($content, self::OFFICE, 'presentation');
+        $settings = $parent ? $this->first($content, self::PRESENTATION, 'settings') : null;
 
         foreach ($existing as $page) {
             $page->parentNode?->removeChild($page);
         }
+
+        // PowerPoint ignores every draw:page that follows presentation:settings.
+        $before = $settings?->parentNode === $parent ? $settings : null;
 
         foreach (array_values($pages) as $index => $page) {
             if ($page->ownerDocument !== $content) {
                 $page = $content->importNode($page, true);
             }
             $page->setAttributeNS(self::DRAW, 'draw:name', 'page'.($index + 1));
-            $parent?->appendChild($page);
+            $parent?->insertBefore($page, $before);
         }
+    }
+
+    private function uniquifyIds(DOMDocument $content, DOMDocument $styles): void
+    {
+        $used = [];
+        $containers = [
+            ...iterator_to_array($styles->getElementsByTagNameNS(self::STYLE, 'master-page')),
+            ...$this->pages($content),
+        ];
+
+        foreach ($containers as $container) {
+            $elements = [$container, ...iterator_to_array($container->getElementsByTagName('*'))];
+            $renames = [];
+
+            foreach ($elements as $element) {
+                foreach (self::ID_ATTRIBUTES as $namespace => $qualified) {
+                    $id = $element->getAttributeNS($namespace, 'id');
+                    if ($id === '') {
+                        continue;
+                    }
+                    $renames[$id] ??= $this->freshId($id, $used);
+                    if ($renames[$id] !== $id) {
+                        $element->setAttributeNS($namespace, $qualified, $renames[$id]);
+                    }
+                }
+            }
+
+            foreach ($elements as $element) {
+                foreach (iterator_to_array($element->attributes) as $attribute) {
+                    $renamed = $renames[$attribute->value] ?? null;
+                    if ($renamed !== null && $renamed !== $attribute->value && in_array($attribute->localName, self::ID_REFERENCES, true)) {
+                        $element->setAttributeNS($attribute->namespaceURI, $attribute->nodeName, $renamed);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, true>  $used
+     */
+    private function freshId(string $id, array &$used): string
+    {
+        $candidate = $id;
+        for ($suffix = 2; isset($used[$candidate]); $suffix++) {
+            $candidate = $id.'-'.$suffix;
+        }
+        $used[$candidate] = true;
+
+        return $candidate;
+    }
+
+    private function section(DOMDocument $dom, string $localName): DOMElement
+    {
+        $existing = $this->first($dom, self::OFFICE, $localName);
+        if ($existing) {
+            return $existing;
+        }
+
+        $root = $dom->documentElement;
+        $section = $dom->createElementNS(self::OFFICE, 'office:'.$localName);
+        $later = array_slice(self::OFFICE_SECTIONS, array_search($localName, self::OFFICE_SECTIONS, true) + 1);
+
+        foreach ($root->childNodes as $child) {
+            if ($child instanceof DOMElement && $child->namespaceURI === self::OFFICE && in_array($child->localName, $later, true)) {
+                return $root->insertBefore($section, $child);
+            }
+        }
+
+        return $root->appendChild($section);
     }
 
     private function scaleGeometry(DOMDocument $dom, float $scale): void
