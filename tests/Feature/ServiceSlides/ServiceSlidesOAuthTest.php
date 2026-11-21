@@ -256,7 +256,7 @@ class ServiceSlidesOAuthTest extends TestCase
             'kind' => 'song',
             'title' => $title,
             'original_path' => 'slides/song.odp',
-            'odp_path' => 'slides/song.odp',
+            'file_path' => 'slides/song.odp',
             'slide_count' => 1,
         ]);
     }

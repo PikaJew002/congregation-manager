@@ -2,6 +2,8 @@ export type SlideKind = 'song' | 'liturgy' | 'other';
 
 export type SlideKinds = Record<string, string>;
 
+export type SlideFormat = 'odp' | 'pptx';
+
 export type SlideAlias = {
     id: number;
     alias: string;
@@ -11,6 +13,7 @@ export type SlideSource = {
     id: number;
     title: string;
     kind: SlideKind;
+    original_format: SlideFormat;
     author: string | null;
     ccli: string | null;
     notes: string | null;
@@ -46,6 +49,7 @@ export type PresetStep =
 export type SlideTemplate = {
     id: number;
     name: string;
+    format: SlideFormat;
     default_kind: SlideKind | null;
     is_history_tracked: boolean;
     preset: PresetStep[] | null;
@@ -138,4 +142,7 @@ export type OAuthConnection = {
     created_at: string;
 };
 
-export type LibrarySourceOption = Pick<SlideSource, 'id' | 'title' | 'kind'>;
+export type LibrarySourceOption = Pick<
+    SlideSource,
+    'id' | 'title' | 'kind' | 'original_format'
+>;

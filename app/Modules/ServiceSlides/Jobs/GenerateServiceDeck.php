@@ -4,7 +4,7 @@ namespace App\Modules\ServiceSlides\Jobs;
 
 use App\Modules\ServiceSlides\Models\ServiceDeck;
 use App\Modules\ServiceSlides\Models\ServiceDeckEntry;
-use App\Modules\ServiceSlides\Support\OdpDeckBuilder;
+use App\Modules\ServiceSlides\Support\SlideFormats;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Storage;
@@ -16,7 +16,7 @@ class GenerateServiceDeck implements ShouldQueue
 
     public function __construct(public int $deckId) {}
 
-    public function handle(OdpDeckBuilder $builder): void
+    public function handle(SlideFormats $formats): void
     {
         $deck = ServiceDeck::query()->with(['template', 'entries.templateSlide', 'entries.source', 'service'])->findOrFail($this->deckId);
 
@@ -30,6 +30,21 @@ class GenerateServiceDeck implements ShouldQueue
             return;
         }
 
+        $format = $deck->template->format;
+        $mismatched = $deck->entries
+            ->filter(fn (ServiceDeckEntry $entry) => $entry->source && $entry->source->original_format !== $format)
+            ->map(fn (ServiceDeckEntry $entry) => $entry->source->title)
+            ->unique();
+
+        if ($mismatched->isNotEmpty()) {
+            $deck->update([
+                'status' => 'failed',
+                'warnings' => ['This deck uses '.SlideFormats::LABELS[$format].' files, so these items cannot go in it: '.$mismatched->implode(', ').'.'],
+            ]);
+
+            return;
+        }
+
         $deck->update(['status' => 'generating']);
         $work = storage_path('app/deck-'.$deck->id);
         if (! is_dir($work)) {
@@ -37,8 +52,8 @@ class GenerateServiceDeck implements ShouldQueue
         }
 
         try {
-            $templatePath = $work.'/template.odp';
-            file_put_contents($templatePath, Storage::disk('files')->get($deck->template->odp_path));
+            $templatePath = $work.'/template.'.$format;
+            file_put_contents($templatePath, Storage::disk('files')->get($deck->template->file_path));
             $entries = [];
 
             foreach ($deck->entries as $entry) {
@@ -47,15 +62,15 @@ class GenerateServiceDeck implements ShouldQueue
                 }
 
                 if ($entry->entry_type === 'source' && $entry->source) {
-                    $sourcePath = $work.'/source-'.$entry->id.'.odp';
-                    file_put_contents($sourcePath, Storage::disk('files')->get($entry->source->odp_path));
+                    $sourcePath = $work.'/source-'.$entry->id.'.'.$format;
+                    file_put_contents($sourcePath, Storage::disk('files')->get($entry->source->file_path));
                     $entries[] = ['type' => 'source', 'path' => $sourcePath];
                 }
             }
 
-            $output = $work.'/deck.odp';
-            $warnings = $builder->build($templatePath, $entries, $output);
-            $stored = 'decks/'.$deck->service->team_id.'/'.$deck->id.'.odp';
+            $output = $work.'/deck.'.$format;
+            $warnings = $formats->builder($format)->build($templatePath, $entries, $output);
+            $stored = 'decks/'.$deck->service->team_id.'/'.$deck->id.'.'.$format;
             Storage::disk('files')->put($stored, file_get_contents($output));
             $changed = $deck->fresh()->status !== 'generating';
             $deck->update([

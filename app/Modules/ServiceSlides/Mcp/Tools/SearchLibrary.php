@@ -48,6 +48,7 @@ class SearchLibrary extends Tool
                 'id' => $source->id,
                 'title' => $source->title,
                 'kind' => $source->kind,
+                'format' => $source->original_format,
                 'aliases' => $source->aliases->pluck('alias')->all(),
             ]);
 

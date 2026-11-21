@@ -6,17 +6,19 @@ use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Http\UploadedFile;
 
-class OdpFile implements ValidationRule
+class PresentationFile implements ValidationRule
 {
+    public function __construct(private ?string $format = null) {}
+
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         if (! $value instanceof UploadedFile || ! $value->isValid()) {
-            $fail('Upload an ODP file.');
+            $fail('Upload an ODP or PPTX file.');
 
             return;
         }
 
-        $rejection = app(OdpInspector::class)->rejection($value->getRealPath());
+        $rejection = app(SlideFormats::class)->rejection($value->getRealPath(), $this->format);
 
         if ($rejection !== null) {
             $fail($rejection);

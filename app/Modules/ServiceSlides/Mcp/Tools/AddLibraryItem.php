@@ -5,7 +5,7 @@ namespace App\Modules\ServiceSlides\Mcp\Tools;
 use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use App\Modules\ServiceSlides\Models\SlideSource;
-use App\Modules\ServiceSlides\Support\OdpInspector;
+use App\Modules\ServiceSlides\Support\SlideFormats;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
@@ -20,18 +20,18 @@ use Throwable;
 
 class AddLibraryItem extends Tool
 {
-    protected string $description = 'Add an ODP file to this congregation\'s slide library. Send the file as base64, or send a Dropbox download link. When title or author is omitted, the first slide supplies them: line one is the title and line two is the artist. PowerPoint files are rejected.';
+    protected string $description = 'Add an ODP or PPTX file to this congregation\'s slide library. Songs are ODP; liturgy is usually PPTX, and a deck only takes files in its template\'s format. Send the file as base64, or send a Dropbox download link. When title is omitted, line one of the first slide supplies it; for songs, line two supplies a missing author.';
 
-    public function __construct(private CongregationContext $context, private SlideFiles $files, private OdpInspector $inspector) {}
+    public function __construct(private CongregationContext $context, private SlideFiles $files, private SlideFormats $formats) {}
 
     public function schema(JsonSchema $schema): array
     {
         return [
             'title' => $schema->string()->description('Library title. Omit to use the first line of the first slide.'),
             'kind' => $schema->string()->description('song, liturgy, or other.')->required(),
-            'file' => $schema->string()->description('Base64-encoded ODP file, optionally as a data URL. Send this or url.'),
-            'url' => $schema->string()->description('https Dropbox link to the ODP. A shared link is accepted.'),
-            'author' => $schema->string()->description('Song artist. Omit to use the second line of the first slide when it exists.'),
+            'file' => $schema->string()->description('Base64-encoded ODP or PPTX file, optionally as a data URL. Send this or url.'),
+            'url' => $schema->string()->description('https Dropbox link to the ODP or PPTX file. A shared link is accepted.'),
+            'author' => $schema->string()->description('Song artist. Omit to use the second line of the first slide of a song when it exists.'),
             'ccli' => $schema->string()->description('Optional CCLI number.'),
             'notes' => $schema->string()->description('Optional notes.'),
             'aliases' => $schema->array()->items($schema->string())->description('Optional alternate titles.'),
@@ -58,7 +58,7 @@ class AddLibraryItem extends Tool
         ]);
 
         $upload = filled($data['file'] ?? null)
-            ? $this->odpUpload($data['file'])
+            ? $this->decodeUpload($data['file'])
             : $this->downloadDropbox($data['url']);
 
         if (is_string($upload)) {
@@ -66,13 +66,14 @@ class AddLibraryItem extends Tool
         }
 
         try {
-            $rejection = $this->inspector->rejection($upload->getRealPath());
+            $rejection = $this->formats->rejection($upload->getRealPath());
 
             if ($rejection !== null) {
                 return Response::error($rejection);
             }
 
-            $lines = $this->inspector->firstSlideLines($upload->getRealPath());
+            $format = (string) $this->formats->detect($upload->getRealPath());
+            $lines = $this->formats->inspector($format)->firstSlideLines($upload->getRealPath());
             $title = trim((string) ($data['title'] ?? ''));
             $author = trim((string) ($data['author'] ?? ''));
 
@@ -80,7 +81,7 @@ class AddLibraryItem extends Tool
                 $title = mb_substr($lines[0] ?? '', 0, 255);
             }
 
-            if ($author === '' && isset($lines[1])) {
+            if ($author === '' && $data['kind'] === 'song' && isset($lines[1])) {
                 $author = mb_substr($lines[1], 0, 255);
             }
 
@@ -88,10 +89,10 @@ class AddLibraryItem extends Tool
                 return Response::error('The first slide has no title line.');
             }
 
-            $existing = SlideSource::query()->forTeam($team)->where('title', $title)->where('archived', false)->first();
+            $existing = SlideSource::query()->forTeam($team)->where('title', $title)->where('original_format', $format)->where('archived', false)->first();
 
             if ($existing) {
-                return Response::error($title.' is already in this congregation\'s library.');
+                return Response::error($title.' is already in this congregation\'s library as '.SlideFormats::LABELS[$format].'.');
             }
 
             $source = $this->files->createSource($team, $upload, [
@@ -120,12 +121,13 @@ class AddLibraryItem extends Tool
             'title' => $source->title,
             'author' => $source->author,
             'kind' => $source->kind,
+            'format' => $source->original_format,
             'slide_count' => $source->slide_count,
             'aliases' => $source->aliases->pluck('alias')->all(),
         ]);
     }
 
-    private function odpUpload(string $encoded): UploadedFile|string
+    private function decodeUpload(string $encoded): UploadedFile|string
     {
         $encoded = preg_replace('/\s+/', '', $encoded) ?? '';
 
@@ -136,14 +138,14 @@ class AddLibraryItem extends Tool
         $bytes = base64_decode($encoded, true);
 
         if ($bytes === false || $bytes === '') {
-            return 'The file must be a base64-encoded ODP.';
+            return 'The file must be a base64-encoded ODP or PPTX.';
         }
 
         if (strlen($bytes) > 102400 * 1024) {
-            return 'The ODP file is larger than 100 MB.';
+            return 'The file is larger than 100 MB.';
         }
 
-        $temporary = tempnam(sys_get_temp_dir(), 'library-odp-');
+        $temporary = tempnam(sys_get_temp_dir(), 'library-');
 
         if ($temporary === false) {
             return 'The file could not be stored.';
@@ -151,7 +153,7 @@ class AddLibraryItem extends Tool
 
         file_put_contents($temporary, $bytes);
 
-        return new UploadedFile($temporary, 'library.odp', OdpInspector::MIMETYPE, null, true);
+        return new UploadedFile($temporary, 'library', null, null, true);
     }
 
     private function downloadDropbox(string $url): UploadedFile|string
@@ -172,7 +174,7 @@ class AddLibraryItem extends Tool
                 ],
                 'progress' => function ($downloadTotal, $downloaded, $uploadTotal, $uploaded): void {
                     if ($downloaded > 102400 * 1024) {
-                        throw new ConnectionException('The ODP file is larger than 100 MB.');
+                        throw new ConnectionException('The file is larger than 100 MB.');
                     }
                 },
             ])->timeout(60)->get($downloadUrl);
@@ -193,10 +195,10 @@ class AddLibraryItem extends Tool
         }
 
         if (strlen($bytes) > 102400 * 1024) {
-            return 'The ODP file is larger than 100 MB.';
+            return 'The file is larger than 100 MB.';
         }
 
-        $temporary = tempnam(sys_get_temp_dir(), 'library-odp-');
+        $temporary = tempnam(sys_get_temp_dir(), 'library-');
 
         if ($temporary === false) {
             return 'The file could not be stored.';
@@ -204,7 +206,7 @@ class AddLibraryItem extends Tool
 
         file_put_contents($temporary, $bytes);
 
-        return new UploadedFile($temporary, 'library.odp', OdpInspector::MIMETYPE, null, true);
+        return new UploadedFile($temporary, 'library', null, null, true);
     }
 
     private function dropboxDownloadUrl(string $url): string
@@ -237,7 +239,7 @@ class AddLibraryItem extends Tool
         $message = $exception->getMessage();
 
         if (str_contains($message, 'larger than 100 MB')) {
-            return 'The ODP file is larger than 100 MB.';
+            return 'The file is larger than 100 MB.';
         }
 
         if (str_contains($message, 'redirected away from Dropbox')) {

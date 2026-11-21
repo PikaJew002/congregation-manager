@@ -78,6 +78,10 @@ let filteredSources = computed(() => {
     const kind = allKinds.value ? null : (slot?.kind ?? null);
 
     return props.sources.filter((source) => {
+        if (source.original_format !== props.deck.template.format) {
+            return false;
+        }
+
         if (kind && source.kind !== kind) {
             return false;
         }

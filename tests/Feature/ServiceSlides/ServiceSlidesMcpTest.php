@@ -39,7 +39,7 @@ class ServiceSlidesMcpTest extends TestCase
             'kind' => 'song',
             'title' => 'Kumi Ori',
             'original_path' => 'slides/kumi.odp',
-            'odp_path' => 'slides/kumi.odp',
+            'file_path' => 'slides/kumi.odp',
             'slide_count' => 1,
         ]);
 
@@ -95,7 +95,7 @@ class ServiceSlidesMcpTest extends TestCase
         $this->assertSame('song', $source->kind);
         $this->assertSame('Traditional', $source->author);
         $this->assertGreaterThan(0, $source->slide_count);
-        $this->assertTrue(Storage::disk('files')->exists($source->odp_path));
+        $this->assertTrue(Storage::disk('files')->exists($source->file_path));
         $this->assertDatabaseHas('slide_source_aliases', [
             'slide_source_id' => $source->id,
             'alias' => 'Arise',
@@ -115,7 +115,40 @@ class ServiceSlidesMcpTest extends TestCase
                 'kind' => 'other',
                 'file' => base64_encode('not an odp'),
             ])
-            ->assertHasErrors(['not an ODP']);
+            ->assertHasErrors(['Upload an ODP or PPTX presentation.']);
+    }
+
+    public function test_a_powerpoint_liturgy_item_takes_its_title_but_no_author_from_the_first_slide(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
+        $owner->withAccessToken($token->accessToken);
+        SlideSource::query()->create([
+            'team_id' => $team->id,
+            'kind' => 'liturgy',
+            'title' => 'Adon Olam p 110-111',
+            'original_path' => 'slides/adon-olam.odp',
+            'file_path' => 'slides/adon-olam.odp',
+            'slide_count' => 1,
+        ]);
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'kind' => 'liturgy',
+                'file' => base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/adon-olam.pptx'))),
+            ])
+            ->assertOk()
+            ->assertSee('Adon Olam p 110-111')
+            ->assertSee('pptx');
+
+        $source = SlideSource::query()->where('team_id', $team->id)->where('original_format', 'pptx')->firstOrFail();
+
+        $this->assertSame('Adon Olam p 110-111', $source->title);
+        $this->assertNull($source->author);
+        $this->assertSame(3, $source->slide_count);
+        $this->assertSame($source->original_path, $source->file_path);
+        $this->assertStringEndsWith('.pptx', $source->file_path);
     }
 
     public function test_a_dropbox_link_can_add_a_library_item(): void
@@ -225,7 +258,7 @@ class ServiceSlidesMcpTest extends TestCase
         $template = SlideTemplate::query()->create([
             'team_id' => $team->id,
             'name' => 'Music',
-            'odp_path' => 'templates/music.odp',
+            'file_path' => 'templates/music.odp',
             'default_kind' => 'song',
             'is_history_tracked' => true,
         ]);

@@ -64,7 +64,7 @@ class ServiceSlidesPagesTest extends TestCase
         $template = SlideTemplate::query()->create([
             'team_id' => $team->id,
             'name' => $name,
-            'odp_path' => $path,
+            'file_path' => $path,
             'page_size' => $inspector->pageSize($local),
             'default_kind' => 'song',
             'is_history_tracked' => $history,
@@ -92,7 +92,7 @@ class ServiceSlidesPagesTest extends TestCase
             'kind' => 'song',
             'title' => $title,
             'original_path' => $path,
-            'odp_path' => $path,
+            'file_path' => $path,
             'slide_count' => 1,
         ]);
     }

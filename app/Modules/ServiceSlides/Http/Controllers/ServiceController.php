@@ -80,7 +80,7 @@ class ServiceController extends Controller
             'sources' => SlideSource::query()->forTeam($current_team)->where('archived', false)
                 ->with('aliases:id,slide_source_id,alias')
                 ->orderBy('title')
-                ->get(['id', 'title', 'kind', 'slide_count']),
+                ->get(['id', 'title', 'kind', 'slide_count', 'original_format']),
             'templates' => SlideTemplate::query()->forTeam($current_team)->orderBy('name')->get(['id', 'name']),
             'kinds' => config('modules.slide_kinds'),
         ]);
@@ -181,8 +181,9 @@ class ServiceController extends Controller
         foreach ($ready as $deck) {
             $name = DeckController::fileName($deck);
             $base = pathinfo($name, PATHINFO_FILENAME);
+            $extension = pathinfo($name, PATHINFO_EXTENSION);
             for ($n = 2; in_array($name, $names, true); $n++) {
-                $name = "{$base} ({$n}).odp";
+                $name = "{$base} ({$n}).{$extension}";
             }
             $names[] = $name;
             $zip->addFromString($name, Storage::disk('files')->get($deck->generated_path));

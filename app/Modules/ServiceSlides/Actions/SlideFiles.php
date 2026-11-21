@@ -6,8 +6,8 @@ use App\Models\Team;
 use App\Modules\ServiceSlides\Models\ServiceDeck;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
-use App\Modules\ServiceSlides\Support\OdpInspector;
 use App\Modules\ServiceSlides\Support\Preset;
+use App\Modules\ServiceSlides\Support\SlideFormats;
 use App\Modules\ServiceSlides\Support\SongSlideFormatter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,7 @@ use Throwable;
 
 class SlideFiles
 {
-    public function __construct(private OdpInspector $inspector, private Preset $preset, private SongSlideFormatter $formatter) {}
+    public function __construct(private SlideFormats $formats, private Preset $preset, private SongSlideFormatter $formatter) {}
 
     /**
      * @param  array<string, mixed>  $attributes
@@ -29,17 +29,16 @@ class SlideFiles
             ...$attributes,
             ...$this->sourceFileAttributes($team, $file, $attributes['kind'] ?? 'song'),
             'team_id' => $team->id,
-            'original_format' => 'odp',
             'conversion_status' => 'ready',
         ]);
     }
 
     public function replaceSource(SlideSource $source, UploadedFile $file): void
     {
-        $old = [$source->original_path, $source->odp_path];
+        $old = [$source->original_path, $source->file_path];
         $source->update($this->sourceFileAttributes($source->team, $file, $source->kind));
         foreach (array_unique($old) as $path) {
-            $this->deleteIfUnused($path, $source->original_path, $source->odp_path);
+            $this->deleteIfUnused($path, $source->original_path, $source->file_path);
         }
 
         $this->markDecksStale($source);
@@ -53,11 +52,11 @@ class SlideFiles
      */
     public function reformatSource(SlideSource $source): array
     {
-        $old = $source->odp_path;
+        $old = $source->file_path;
         $notes = [];
         $path = $source->original_path;
 
-        if ($source->kind === 'song') {
+        if ($this->formatsAsSong($source->kind, $source->original_format)) {
             $local = tempnam(sys_get_temp_dir(), 'library-odp-');
             file_put_contents($local, Storage::disk('files')->get($source->original_path));
             try {
@@ -67,7 +66,7 @@ class SlideFiles
             }
         }
 
-        $source->update(['odp_path' => $path]);
+        $source->update(['file_path' => $path]);
         $this->deleteIfUnused($old, $source->original_path, $path);
         $this->markDecksStale($source);
 
@@ -102,14 +101,14 @@ class SlideFiles
 
     public function replaceTemplate(SlideTemplate $template, UploadedFile $file): void
     {
-        $old = $template->odp_path;
+        $old = $template->file_path;
 
         DB::transaction(function () use ($template, $file) {
             $template->update($this->templateFileAttributes($template->team, $file));
             $this->syncTemplateSlides($template, $file->getRealPath());
         });
 
-        $this->deleteIfUnused($old, $template->odp_path);
+        $this->deleteIfUnused($old, $template->file_path);
         $template->decks()->each(fn (ServiceDeck $deck) => $deck->markStale());
     }
 
@@ -119,7 +118,7 @@ class SlideFiles
      */
     private function syncTemplateSlides(SlideTemplate $template, string $path): void
     {
-        $slides = $this->inspector->slides($path);
+        $slides = $this->formats->inspector($template->format)->slides($path);
         $existing = $template->slides()->get()->keyBy('slide_index');
 
         foreach ($slides as $slide) {
@@ -147,17 +146,25 @@ class SlideFiles
     private function sourceFileAttributes(Team $team, UploadedFile $file, string $kind): array
     {
         $local = $file->getRealPath();
-        $slides = $this->inspector->usedSlides($this->inspector->slides($local));
-        $original = $file->store('slides/'.$team->id, 'files');
+        $format = $this->formats->detect($local) ?? 'odp';
+        $inspector = $this->formats->inspector($format);
+        $slides = $inspector->usedSlides($inspector->slides($local));
+        $original = $file->storeAs('slides/'.$team->id, Str::random(40).'.'.$format, 'files');
 
         return [
             'original_path' => $original,
-            'odp_path' => $kind === 'song' ? $this->formatSong($team->id, $local, $original)[0] : $original,
+            'original_format' => $format,
+            'file_path' => $this->formatsAsSong($kind, $format) ? $this->formatSong($team->id, $local, $original)[0] : $original,
             'slide_count' => count($slides),
             'slide_lines' => array_map(fn (array $slide) => $slide['line'], $slides),
-            'page_size' => $this->inspector->pageSize($local),
+            'page_size' => $inspector->pageSize($local),
             'file_updated_at' => now(),
         ];
+    }
+
+    private function formatsAsSong(string $kind, ?string $format): bool
+    {
+        return $kind === 'song' && ($format ?? 'odp') === 'odp';
     }
 
     /**
@@ -194,9 +201,12 @@ class SlideFiles
      */
     private function templateFileAttributes(Team $team, UploadedFile $file): array
     {
+        $format = $this->formats->detect($file->getRealPath()) ?? 'odp';
+
         return [
-            'odp_path' => $file->store('templates/'.$team->id, 'files'),
-            'page_size' => $this->inspector->pageSize($file->getRealPath()),
+            'file_path' => $file->storeAs('templates/'.$team->id, Str::random(40).'.'.$format, 'files'),
+            'format' => $format,
+            'page_size' => $this->formats->inspector($format)->pageSize($file->getRealPath()),
             'file_updated_at' => now(),
         ];
     }

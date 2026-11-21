@@ -172,9 +172,11 @@ const removeStep = (index: number) => {
 };
 
 const sourcesForKind = (kind: string | null) =>
-    kind
-        ? props.sources.filter((source) => source.kind === kind)
-        : props.sources;
+    props.sources.filter(
+        (source) =>
+            source.original_format === selected.value?.format &&
+            (!kind || source.kind === kind),
+    );
 </script>
 
 <template>
@@ -196,12 +198,12 @@ const sourcesForKind = (kind: string | null) =>
             <Heading variant="small" title="Upload a template" />
             <div class="grid gap-4 sm:grid-cols-2">
                 <div class="grid gap-2 sm:col-span-2">
-                    <Label for="file">ODP file</Label>
+                    <Label for="file">ODP or PPTX file</Label>
                     <Input
                         id="file"
                         type="file"
                         name="file"
-                        accept=".odp"
+                        accept=".odp,.pptx"
                         required
                     />
                     <InputError :message="errors.file" />
@@ -263,9 +265,14 @@ const sourcesForKind = (kind: string | null) =>
                     @click="selectedId = template.id"
                 >
                     <span class="font-medium">{{ template.name }}</span>
-                    <Badge variant="outline">{{
-                        template.decks_count ?? 0
-                    }}</Badge>
+                    <span class="flex gap-1">
+                        <Badge variant="secondary">{{
+                            template.format.toUpperCase()
+                        }}</Badge>
+                        <Badge variant="outline">{{
+                            template.decks_count ?? 0
+                        }}</Badge>
+                    </span>
                 </button>
             </div>
 
@@ -284,7 +291,7 @@ const sourcesForKind = (kind: string | null) =>
                             {{ uploading ? 'Uploading…' : 'Replace file' }}
                             <input
                                 type="file"
-                                accept=".odp"
+                                :accept="`.${selected.format}`"
                                 class="sr-only"
                                 @change="replaceFile"
                             />

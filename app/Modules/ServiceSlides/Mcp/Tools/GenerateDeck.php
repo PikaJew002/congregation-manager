@@ -12,7 +12,7 @@ use Laravel\Mcp\Server\Tool;
 
 class GenerateDeck extends Tool
 {
-    protected string $description = 'Queue a merged ODP for one deck on a service date.';
+    protected string $description = 'Queue a merged deck for one service date. It is an ODP or PPTX file, matching the deck\'s template.';
 
     public function __construct(private CongregationContext $context) {}
 

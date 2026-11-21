@@ -7,6 +7,7 @@ use App\Models\Team;
 use App\Modules\ServiceSlides\Actions\ServicePlanner;
 use App\Modules\ServiceSlides\Jobs\GenerateServiceDeck;
 use App\Modules\ServiceSlides\Models\ServiceDeck;
+use App\Modules\ServiceSlides\Support\SlideFormats;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -21,7 +22,9 @@ class DeckController extends Controller
 {
     public static function fileName(ServiceDeck $deck): string
     {
-        return $deck->service->service_date->toDateString().' '.Str::of($deck->name)->replaceMatches('/[\/\\\\:*?"<>|]+/', '-')->trim().'.odp';
+        $extension = pathinfo((string) $deck->generated_path, PATHINFO_EXTENSION) ?: 'odp';
+
+        return $deck->service->service_date->toDateString().' '.Str::of($deck->name)->replaceMatches('/[\/\\\\:*?"<>|]+/', '-')->trim().'.'.$extension;
     }
 
     public function update(Request $request, Team $current_team, ServiceDeck $deck): RedirectResponse
@@ -61,10 +64,12 @@ class DeckController extends Controller
                 'required_if:entries.*.entry_type,source',
                 'nullable',
                 'integer',
-                Rule::exists('slide_sources', 'id')->where('team_id', $current_team->id),
+                Rule::exists('slide_sources', 'id')->where('team_id', $current_team->id)->where('original_format', $deck->template->format),
             ],
             'entries.*.slot_key' => ['nullable', 'string', 'max:50'],
             'entries.*.auto' => ['nullable', 'boolean'],
+        ], [
+            'entries.*.slide_source_id.exists' => __('This deck uses :format files, so every library item in it must be :format.', ['format' => SlideFormats::LABELS[$deck->template->format] ?? $deck->template->format]),
         ]);
 
         $planner->replaceEntries($deck, $data['entries']);

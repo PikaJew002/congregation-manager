@@ -11,7 +11,7 @@ use Laravel\Mcp\Server\Tool;
 
 class ListTemplates extends Tool
 {
-    protected string $description = 'List slide templates for this congregation, with the slots each deck can fill.';
+    protected string $description = 'List slide templates for this congregation, with the slots each deck can fill. A deck only takes library items in its template\'s format (odp or pptx).';
 
     public function __construct(private CongregationContext $context, private Preset $preset) {}
 
@@ -26,6 +26,7 @@ class ListTemplates extends Tool
             ->map(fn (SlideTemplate $template) => [
                 'id' => $template->id,
                 'name' => $template->name,
+                'format' => $template->format,
                 'default_kind' => $template->default_kind,
                 'is_history_tracked' => $template->is_history_tracked,
                 'slots' => collect($this->preset->steps($template))->where('type', 'slot')->map(fn (array $slot) => [

@@ -60,6 +60,7 @@ class ServicePlanner
 
             $defaults = SlideSource::query()->forTeam($template->team)
                 ->whereIn('id', $step['default_source_ids'] ?? [])
+                ->where('original_format', $template->format)
                 ->where('archived', false)
                 ->get()
                 ->sortBy(fn (SlideSource $source) => array_search($source->id, $step['default_source_ids'], true));
@@ -104,7 +105,7 @@ class ServicePlanner
                     continue;
                 }
 
-                $match = $this->match($deck->service->team, $title);
+                $match = $this->match($deck->service->team, $title, $deck->template->format);
 
                 if ($match) {
                     $sources[] = $match;
@@ -212,10 +213,17 @@ class ServicePlanner
         return $template;
     }
 
-    public function match(Team $team, string $title): ?SlideSource
+    /**
+     * Only items in the given file format are considered, since a deck merges files of one format.
+     */
+    public function match(Team $team, string $title, ?string $format = null): ?SlideSource
     {
         $needle = Str::lower(trim($title));
         $sources = $this->library[$team->id] ??= SlideSource::query()->forTeam($team)->where('archived', false)->with('aliases')->get();
+
+        if ($format !== null) {
+            $sources = $sources->where('original_format', $format);
+        }
 
         $exact = $sources->first(fn (SlideSource $source) => Str::lower($source->title) === $needle)
             ?? $sources->first(fn (SlideSource $source) => $source->aliases->contains(fn ($alias) => Str::lower($alias->alias) === $needle));
