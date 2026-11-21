@@ -38,34 +38,6 @@ class OdpDeckBuilderTest extends TestCase
         $this->assertShapesFitSlide($destination, 11.02431 * 2.54, 6.20139 * 2.54);
     }
 
-    public function test_music_songs_get_white_text_and_wider_title_boxes(): void
-    {
-        $build = function (bool $music, string $name) {
-            $destination = storage_path("framework/testing/{$name}.odp");
-            (new OdpDeckBuilder)->build($this->fixture('music-template.odp'), [
-                ['type' => 'template_slide', 'index' => 0],
-                ['type' => 'source', 'path' => $this->fixture('kumi-ori.odp'), 'music' => $music],
-                ['type' => 'source', 'path' => $this->fixture('trees-of-the-field.odp'), 'music' => $music],
-            ], $destination);
-
-            return $destination;
-        };
-        $plain = $build(false, 'merged-plain');
-        $music = $build(true, 'merged-music-white');
-
-        $this->assertNotSame([], $this->textColors($plain, fn ($color) => $color !== '#ffffff'));
-        $this->assertSame([], $this->textColors($music, fn ($color) => $color !== '#ffffff'));
-
-        $plainTitles = $this->boxWidths($plain, 1);
-        $musicTitles = $this->boxWidths($music, 1);
-        $this->assertCount(count($plainTitles), $musicTitles);
-        foreach ($plainTitles as $index => $width) {
-            $this->assertGreaterThan($width * 1.1, $musicTitles[$index]);
-        }
-        $this->assertEquals($this->boxWidths($plain, 2), $this->boxWidths($music, 2));
-        $this->assertShapesFitSlide($music, 11.02431 * 2.54, 6.20139 * 2.54);
-    }
-
     public function test_it_slots_liturgy_items_around_a_title_slide(): void
     {
         $destination = storage_path('framework/testing/merged-liturgy.odp');
@@ -174,92 +146,6 @@ class OdpDeckBuilderTest extends TestCase
                 "{$shape->getAttribute('draw:name')} on {$shape->parentNode->getAttribute('draw:name')} spills off the slide.",
             );
         }
-    }
-
-    /**
-     * Effective colours of text on imported song slides that match the filter, ignoring speaker notes.
-     *
-     * @return list<string>
-     */
-    private function textColors(string $path, callable $filter): array
-    {
-        [$content, $styles] = $this->documents($path);
-        $documents = [];
-        foreach ([$content, $styles] as $xml) {
-            $dom = new DOMDocument;
-            $dom->loadXML($xml);
-            $documents[] = $dom;
-        }
-        $xpath = $this->xpath($documents[0]);
-        $styleXpath = $this->xpath($documents[1]);
-        $color = function (string $name) use ($xpath, $styleXpath): ?string {
-            for ($depth = 0; $name !== '' && $depth < 10; $depth++) {
-                $style = $xpath->query("//style:style[@style:name='{$name}']")->item(0)
-                    ?? $styleXpath->query("//style:style[@style:name='{$name}']")->item(0);
-                if (! $style) {
-                    return null;
-                }
-                $value = $xpath->evaluate('string(style:text-properties/@fo:color)', $style);
-                if ($value !== '') {
-                    return $value;
-                }
-                $name = $style->getAttribute('style:parent-style-name');
-            }
-
-            return null;
-        };
-
-        $found = [];
-        foreach ($xpath->query('//draw:page/*[starts-with(@draw:style-name, "i")]//text:span[normalize-space()]') as $span) {
-            $chain = [$span->getAttribute('text:style-name')];
-            for ($node = $span->parentNode; $node instanceof DOMElement && $node->localName !== 'page'; $node = $node->parentNode) {
-                $chain[] = $node->getAttribute('text:style-name');
-                $chain[] = $node->getAttribute('draw:text-style-name');
-                $chain[] = $node->getAttribute('draw:style-name');
-            }
-            $resolved = null;
-            foreach (array_filter($chain) as $name) {
-                if ($resolved = $color($name)) {
-                    break;
-                }
-            }
-            $resolved ??= 'automatic';
-            if ($filter($resolved)) {
-                $found[] = $resolved;
-            }
-        }
-
-        return $found;
-    }
-
-    /**
-     * Widths, in source order, of text boxes on the given slide of the first imported song.
-     *
-     * @return list<float>
-     */
-    private function boxWidths(string $path, int $songSlide): array
-    {
-        $dom = new DOMDocument;
-        $dom->loadXML($this->documents($path)[0]);
-        $pages = $this->xpath($dom)->query('//draw:page[.//*[starts-with(@draw:style-name, "i")]]');
-        $widths = [];
-        foreach ($this->xpath($dom)->query('*[@svg:width][normalize-space()]', $pages->item($songSlide - 1)) as $shape) {
-            $widths[] = round((float) $shape->getAttribute('svg:width') * (str_ends_with($shape->getAttribute('svg:width'), 'in') ? 2.54 : 1), 3);
-        }
-
-        return $widths;
-    }
-
-    private function xpath(DOMDocument $dom): DOMXPath
-    {
-        $xpath = new DOMXPath($dom);
-        $xpath->registerNamespace('draw', 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0');
-        $xpath->registerNamespace('svg', 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0');
-        $xpath->registerNamespace('style', 'urn:oasis:names:tc:opendocument:xmlns:style:1.0');
-        $xpath->registerNamespace('fo', 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0');
-        $xpath->registerNamespace('text', 'urn:oasis:names:tc:opendocument:xmlns:text:1.0');
-
-        return $xpath;
     }
 
     /**

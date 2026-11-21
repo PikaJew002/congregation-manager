@@ -50,10 +50,14 @@ class LibraryController extends Controller
         return back();
     }
 
-    public function update(Request $request, Team $current_team, SlideSource $source): RedirectResponse
+    public function update(Request $request, Team $current_team, SlideSource $source, SlideFiles $files): RedirectResponse
     {
         $this->authorizeSource($current_team, $source);
         $source->update($request->validate($this->metadataRules()));
+
+        if ($source->wasChanged('kind')) {
+            $files->reformatSource($source);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Saved.')]);
 
