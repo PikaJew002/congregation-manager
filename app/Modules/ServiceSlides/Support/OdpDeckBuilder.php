@@ -36,7 +36,7 @@ class OdpDeckBuilder
     private const ID_REFERENCES = ['start-shape', 'end-shape', 'targetElement', 'shape-id'];
 
     /**
-     * @param  list<array{type: string, index?: int, path?: string, slides?: list<int>}>  $entries
+     * @param  list<array{type: string, index?: int, path?: string, slides?: list<int>, music?: bool}>  $entries
      * @return list<string>
      */
     public function build(string $templatePath, array $entries, string $destination): array
@@ -80,6 +80,7 @@ class OdpDeckBuilder
                 $masterHashes,
                 'i'.$index.'_',
                 $entry['slides'] ?? null,
+                $entry['music'] ?? false,
             );
             $warnings = [...$warnings, ...$imported['warnings']];
             array_push($pages, ...$imported['pages']);
@@ -112,6 +113,7 @@ class OdpDeckBuilder
         array &$masterHashes,
         string $prefix,
         ?array $onlySlides,
+        bool $music,
     ): array {
         $warnings = [];
         $sourceFiles = $this->readZip($path);
@@ -136,6 +138,15 @@ class OdpDeckBuilder
         if ($scale !== null && abs($scale - 1) > 0.01) {
             $this->scaleGeometry($sourceContent, $scale);
             $this->scaleGeometry($sourceStyles, $scale);
+        }
+
+        if ($music) {
+            $styleIndex = $this->styleIndex($sourceContent, $sourceStyles);
+            $this->whitenText($selected, $styleIndex);
+            $slideWidth = ($templateSize ?? $sourceSize)['width'] ?? null;
+            if ($onlySlides === null && $selected !== [] && $slideWidth !== null) {
+                $this->widenTitleBoxes($selected[0], $styleIndex, $slideWidth);
+            }
         }
 
         $this->rewriteImages($sourceContent, $sourceFiles, $files, $imageHashes);
@@ -496,6 +507,160 @@ class OdpDeckBuilder
             $page->setAttributeNS(self::DRAW, 'draw:name', 'page'.($index + 1));
             $parent?->insertBefore($page, $before);
         }
+    }
+
+    /**
+     * @return array<string, list<DOMElement>>
+     */
+    private function styleIndex(DOMDocument ...$documents): array
+    {
+        $index = [];
+        foreach ($documents as $dom) {
+            foreach ($dom->getElementsByTagNameNS(self::STYLE, 'style') as $style) {
+                $index[$style->getAttributeNS(self::STYLE, 'name')][] = $style;
+            }
+        }
+
+        return $index;
+    }
+
+    /**
+     * PowerPoint draws LibreOffice's automatic font colour as black, so every style used on a slide gets explicit white.
+     *
+     * @param  list<DOMElement>  $pages
+     * @param  array<string, list<DOMElement>>  $styleIndex
+     */
+    private function whitenText(array $pages, array $styleIndex): void
+    {
+        $pending = [];
+        foreach ($pages as $page) {
+            foreach ($this->slideElements($page) as $element) {
+                foreach (iterator_to_array($element->attributes) as $attribute) {
+                    if (in_array($attribute->localName, ['style-name', 'text-style-name'], true)) {
+                        $pending[] = $attribute->value;
+                    }
+                }
+            }
+        }
+
+        $done = [];
+        while ($pending !== []) {
+            $name = array_pop($pending);
+            if (isset($done[$name])) {
+                continue;
+            }
+            $done[$name] = true;
+
+            foreach ($styleIndex[$name] ?? [] as $style) {
+                if (! in_array($style->getAttributeNS(self::STYLE, 'family'), ['graphic', 'presentation', 'paragraph', 'text'], true)) {
+                    continue;
+                }
+                $properties = $this->child($style, self::STYLE, 'text-properties')
+                    ?? $style->appendChild($style->ownerDocument->createElementNS(self::STYLE, 'style:text-properties'));
+                $properties->setAttributeNS(self::FO, 'fo:color', '#ffffff');
+                $properties->removeAttributeNS(self::STYLE, 'use-window-font-color');
+
+                $parent = $style->getAttributeNS(self::STYLE, 'parent-style-name');
+                if ($parent !== '') {
+                    $pending[] = $parent;
+                }
+            }
+        }
+    }
+
+    /**
+     * Title text sized to fit in LibreOffice wraps in PowerPoint, so give each title slide text box some room,
+     * growing away from the side its text is aligned to and staying on the slide.
+     *
+     * @param  array<string, list<DOMElement>>  $styleIndex
+     */
+    private function widenTitleBoxes(DOMElement $page, array $styleIndex, float $slideWidth): void
+    {
+        $margin = 0.5;
+
+        foreach (iterator_to_array($page->childNodes) as $shape) {
+            if (! $shape instanceof DOMElement || ! in_array($shape->localName, ['frame', 'custom-shape'], true) || trim($shape->textContent) === '') {
+                continue;
+            }
+
+            $x = $this->toCentimeters($shape->getAttributeNS(self::SVG, 'x'));
+            $width = $this->toCentimeters($shape->getAttributeNS(self::SVG, 'width'));
+            if ($x === null || $width === null || $width >= $slideWidth * 0.8) {
+                continue;
+            }
+
+            $wider = min($width * 1.2, $slideWidth - 2 * $margin);
+            $extra = $wider - $width;
+            $left = match ($this->textAlignment($shape, $styleIndex)) {
+                'right' => $x - $extra,
+                'center' => $x - $extra / 2,
+                default => $x,
+            };
+            $left = max($margin, min($left, $slideWidth - $margin - $wider));
+
+            $shape->setAttributeNS(self::SVG, 'svg:x', round($left, 4).'cm');
+            $shape->setAttributeNS(self::SVG, 'svg:width', round($wider, 4).'cm');
+        }
+    }
+
+    /**
+     * @param  array<string, list<DOMElement>>  $styleIndex
+     */
+    private function textAlignment(DOMElement $shape, array $styleIndex): string
+    {
+        $paragraph = $shape->getElementsByTagNameNS(self::TEXT, 'p')->item(0);
+        $names = [
+            $paragraph?->getAttributeNS(self::TEXT, 'style-name') ?? '',
+            $shape->getAttributeNS(self::DRAW, 'text-style-name'),
+            $shape->getAttributeNS(self::DRAW, 'style-name'),
+            $shape->getAttributeNS(self::PRESENTATION, 'style-name'),
+        ];
+
+        foreach ($names as $name) {
+            for ($depth = 0; $name !== '' && $depth < 10; $depth++) {
+                $style = $styleIndex[$name][0] ?? null;
+                $align = $style ? $this->child($style, self::STYLE, 'paragraph-properties')?->getAttributeNS(self::FO, 'text-align') : '';
+                if ($align !== '' && $align !== null) {
+                    return match ($align) {
+                        'end', 'right' => 'right',
+                        'center' => 'center',
+                        default => 'left',
+                    };
+                }
+                $name = $style?->getAttributeNS(self::STYLE, 'parent-style-name') ?? '';
+            }
+        }
+
+        return 'left';
+    }
+
+    /**
+     * @return list<DOMElement>
+     */
+    private function slideElements(DOMElement $page): array
+    {
+        $elements = [];
+        foreach (iterator_to_array($page->getElementsByTagName('*')) as $element) {
+            for ($node = $element; $node !== $page; $node = $node->parentNode) {
+                if ($node->localName === 'notes') {
+                    continue 2;
+                }
+            }
+            $elements[] = $element;
+        }
+
+        return $elements;
+    }
+
+    private function child(DOMElement $parent, string $namespace, string $localName): ?DOMElement
+    {
+        foreach ($parent->childNodes as $child) {
+            if ($child instanceof DOMElement && $child->namespaceURI === $namespace && $child->localName === $localName) {
+                return $child;
+            }
+        }
+
+        return null;
     }
 
     private function uniquifyIds(DOMDocument $content, DOMDocument $styles): void
