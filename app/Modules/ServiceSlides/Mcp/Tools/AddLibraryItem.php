@@ -5,10 +5,10 @@ namespace App\Modules\ServiceSlides\Mcp\Tools;
 use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use App\Modules\ServiceSlides\Models\SlideSource;
+use App\Modules\ServiceSlides\Support\EncodedUpload;
 use App\Modules\ServiceSlides\Support\SlideFormats;
 use App\Modules\ServiceSlides\Support\SlideLinkDownloader;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\Rule;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -23,6 +23,7 @@ class AddLibraryItem extends Tool
         private SlideFiles $files,
         private SlideFormats $formats,
         private SlideLinkDownloader $links,
+        private EncodedUpload $uploads,
     ) {}
 
     public function schema(JsonSchema $schema): array
@@ -59,7 +60,7 @@ class AddLibraryItem extends Tool
         ]);
 
         $upload = filled($data['file'] ?? null)
-            ? $this->decodeUpload($data['file'])
+            ? $this->uploads->decode($data['file'])
             : $this->links->download($data['url']);
 
         if (is_string($upload)) {
@@ -126,34 +127,5 @@ class AddLibraryItem extends Tool
             'slide_count' => $source->slide_count,
             'aliases' => $source->aliases->pluck('alias')->all(),
         ]);
-    }
-
-    private function decodeUpload(string $encoded): UploadedFile|string
-    {
-        $encoded = preg_replace('/\s+/', '', $encoded) ?? '';
-
-        if (str_starts_with($encoded, 'data:') && str_contains($encoded, ',')) {
-            $encoded = substr($encoded, (int) strpos($encoded, ',') + 1);
-        }
-
-        $bytes = base64_decode($encoded, true);
-
-        if ($bytes === false || $bytes === '') {
-            return 'The file must be a base64-encoded ODP or PPTX.';
-        }
-
-        if (strlen($bytes) > 102400 * 1024) {
-            return 'The file is larger than 100 MB.';
-        }
-
-        $temporary = tempnam(sys_get_temp_dir(), 'library-');
-
-        if ($temporary === false) {
-            return 'The file could not be stored.';
-        }
-
-        file_put_contents($temporary, $bytes);
-
-        return new UploadedFile($temporary, 'library', null, null, true);
     }
 }

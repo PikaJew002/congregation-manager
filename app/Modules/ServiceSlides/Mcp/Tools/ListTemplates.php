@@ -4,16 +4,16 @@ namespace App\Modules\ServiceSlides\Mcp\Tools;
 
 use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
-use App\Modules\ServiceSlides\Support\Preset;
+use App\Modules\ServiceSlides\Support\PresetSteps;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Tool;
 
 class ListTemplates extends Tool
 {
-    protected string $description = 'List slide templates for this congregation, with the slots each deck can fill. A deck only takes library items in its template\'s format (odp or pptx).';
+    protected string $description = 'List slide templates for this congregation. Each template includes its slides (index, label, role) and its preset steps in order. A slide step names a template slide by label. A slot step includes its key, label, kind, repeat, separator label, and default library titles. When preset_saved is false, steps are the suggestion and have not been saved. A deck only takes library items in its template\'s format (odp or pptx).';
 
-    public function __construct(private CongregationContext $context, private Preset $preset) {}
+    public function __construct(private CongregationContext $context, private PresetSteps $steps) {}
 
     public function handle(Request $request): Response
     {
@@ -22,20 +22,8 @@ class ListTemplates extends Tool
             return $team;
         }
 
-        $templates = SlideTemplate::query()->forTeam($team)->orderBy('name')->get()
-            ->map(fn (SlideTemplate $template) => [
-                'id' => $template->id,
-                'name' => $template->name,
-                'format' => $template->format,
-                'default_kind' => $template->default_kind,
-                'is_history_tracked' => $template->is_history_tracked,
-                'slots' => collect($this->preset->steps($template))->where('type', 'slot')->map(fn (array $slot) => [
-                    'key' => $slot['key'],
-                    'label' => $slot['label'],
-                    'kind' => $slot['kind'],
-                    'repeat' => $slot['repeat'],
-                ])->values()->all(),
-            ]);
+        $templates = SlideTemplate::query()->forTeam($team)->with('slides')->orderBy('name')->get()
+            ->map(fn (SlideTemplate $template) => $this->steps->present($template));
 
         return Response::json(['templates' => $templates->all()]);
     }
