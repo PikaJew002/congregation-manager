@@ -6,31 +6,32 @@ use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Support\SlideFormats;
+use App\Modules\ServiceSlides\Support\SlideLinkDownloader;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
-use InvalidArgumentException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Tool;
-use Psr\Http\Message\UriInterface;
-use Throwable;
 
 class AddLibraryItem extends Tool
 {
-    protected string $description = 'Add an ODP or PPTX file to this congregation\'s slide library. Songs are ODP; liturgy is usually PPTX, and a deck only takes files in its template\'s format. Send the file as base64, or send a Dropbox download link. When title is omitted, line one of the first slide supplies it; for songs, line two supplies a missing author.';
+    protected string $description = 'Add an ODP or PPTX file to this congregation\'s slide library. Songs must be ODP; liturgy must be PPTX. Send the file as base64, or send a Dropbox or Google Drive share/view/edit link (Drive file links from the Google Drive MCP are accepted). When title is omitted, line one of the first slide supplies it; for songs, line two supplies a missing author.';
 
-    public function __construct(private CongregationContext $context, private SlideFiles $files, private SlideFormats $formats) {}
+    public function __construct(
+        private CongregationContext $context,
+        private SlideFiles $files,
+        private SlideFormats $formats,
+        private SlideLinkDownloader $links,
+    ) {}
 
     public function schema(JsonSchema $schema): array
     {
         return [
             'title' => $schema->string()->description('Library title. Omit to use the first line of the first slide.'),
-            'kind' => $schema->string()->description('song, liturgy, or other.')->required(),
+            'kind' => $schema->string()->description('song (ODP), liturgy (PPTX), or other.')->required(),
             'file' => $schema->string()->description('Base64-encoded ODP or PPTX file, optionally as a data URL. Send this or url.'),
-            'url' => $schema->string()->description('https Dropbox link to the ODP or PPTX file. A shared link is accepted.'),
+            'url' => $schema->string()->description('https Dropbox or Google Drive link. Share, view, edit, and file links are accepted and converted to a direct download.'),
             'author' => $schema->string()->description('Song artist. Omit to use the second line of the first slide of a song when it exists.'),
             'ccli' => $schema->string()->description('Optional CCLI number.'),
             'notes' => $schema->string()->description('Optional notes.'),
@@ -59,14 +60,14 @@ class AddLibraryItem extends Tool
 
         $upload = filled($data['file'] ?? null)
             ? $this->decodeUpload($data['file'])
-            : $this->downloadDropbox($data['url']);
+            : $this->links->download($data['url']);
 
         if (is_string($upload)) {
             return Response::error($upload);
         }
 
         try {
-            $rejection = $this->formats->rejection($upload->getRealPath());
+            $rejection = $this->formats->rejection($upload->getRealPath(), kind: $data['kind']);
 
             if ($rejection !== null) {
                 return Response::error($rejection);
@@ -154,98 +155,5 @@ class AddLibraryItem extends Tool
         file_put_contents($temporary, $bytes);
 
         return new UploadedFile($temporary, 'library', null, null, true);
-    }
-
-    private function downloadDropbox(string $url): UploadedFile|string
-    {
-        try {
-            $downloadUrl = $this->dropboxDownloadUrl($url);
-            $response = Http::withOptions([
-                'allow_redirects' => [
-                    'max' => 5,
-                    'strict' => true,
-                    'referer' => false,
-                    'protocols' => ['https'],
-                    'on_redirect' => function ($request, $response, UriInterface $uri): void {
-                        if ($uri->getScheme() !== 'https' || ! $this->isDropboxHost($uri->getHost())) {
-                            throw new ConnectionException('The Dropbox link redirected away from Dropbox.');
-                        }
-                    },
-                ],
-                'progress' => function ($downloadTotal, $downloaded, $uploadTotal, $uploaded): void {
-                    if ($downloaded > 102400 * 1024) {
-                        throw new ConnectionException('The file is larger than 100 MB.');
-                    }
-                },
-            ])->timeout(60)->get($downloadUrl);
-        } catch (InvalidArgumentException $exception) {
-            return $exception->getMessage();
-        } catch (Throwable $exception) {
-            return $this->downloadFailure($exception);
-        }
-
-        if (! $response->successful()) {
-            return 'Dropbox did not return the file.';
-        }
-
-        $bytes = $response->body();
-
-        if ($bytes === '' || str_starts_with(ltrim($bytes), '<')) {
-            return 'Dropbox returned a web page instead of the file. The link needs to be shared so anyone with it can download.';
-        }
-
-        if (strlen($bytes) > 102400 * 1024) {
-            return 'The file is larger than 100 MB.';
-        }
-
-        $temporary = tempnam(sys_get_temp_dir(), 'library-');
-
-        if ($temporary === false) {
-            return 'The file could not be stored.';
-        }
-
-        file_put_contents($temporary, $bytes);
-
-        return new UploadedFile($temporary, 'library', null, null, true);
-    }
-
-    private function dropboxDownloadUrl(string $url): string
-    {
-        $parts = parse_url(trim($url));
-
-        if (! is_array($parts) || ($parts['scheme'] ?? null) !== 'https' || isset($parts['user']) || isset($parts['pass']) || (isset($parts['port']) && (int) $parts['port'] !== 443) || ! $this->isDropboxHost((string) ($parts['host'] ?? '')) || ! isset($parts['path'])) {
-            throw new InvalidArgumentException('Send an https Dropbox link.');
-        }
-
-        $query = [];
-        parse_str($parts['query'] ?? '', $query);
-        $query['dl'] = '1';
-
-        return 'https://'.strtolower((string) $parts['host']).$parts['path'].'?'.http_build_query($query);
-    }
-
-    private function isDropboxHost(string $host): bool
-    {
-        $host = strtolower($host);
-
-        return $host === 'dropbox.com'
-            || $host === 'dropboxusercontent.com'
-            || str_ends_with($host, '.dropbox.com')
-            || str_ends_with($host, '.dropboxusercontent.com');
-    }
-
-    private function downloadFailure(Throwable $exception): string
-    {
-        $message = $exception->getMessage();
-
-        if (str_contains($message, 'larger than 100 MB')) {
-            return 'The file is larger than 100 MB.';
-        }
-
-        if (str_contains($message, 'redirected away from Dropbox')) {
-            return 'The Dropbox link redirected away from Dropbox.';
-        }
-
-        return 'The Dropbox link could not be downloaded.';
     }
 }

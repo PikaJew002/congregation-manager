@@ -8,16 +8,22 @@ use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
 use App\Modules\ServiceSlides\Models\SlideTemplateSlide;
-use App\Modules\ServiceSlides\Support\PresentationFile;
 use App\Modules\ServiceSlides\Support\Preset;
+use App\Modules\ServiceSlides\Support\ResolvesPresentationUpload;
+use App\Modules\ServiceSlides\Support\SlideFormats;
+use App\Modules\ServiceSlides\Support\SlideLinkDownloader;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class TemplateController extends Controller
 {
+    use ResolvesPresentationUpload;
+
     public function index(Team $current_team, Preset $preset): Response
     {
         $templates = SlideTemplate::query()->forTeam($current_team)->with('slides')->withCount('decks')->orderBy('name')->get();
@@ -33,32 +39,39 @@ class TemplateController extends Controller
         ]);
     }
 
-    public function store(Request $request, Team $current_team, SlideFiles $files): RedirectResponse
+    public function store(Request $request, Team $current_team, SlideFiles $files, SlideLinkDownloader $links, SlideFormats $formats): RedirectResponse
     {
-        $data = $request->validate([
-            ...$this->metadataRules(),
-            'file' => ['required', 'file', 'max:102400', new PresentationFile],
-        ]);
+        $data = $request->validate($this->metadataRules());
+        $upload = $this->presentationUpload($request, $links, $formats, kind: $data['default_kind'] ?? null);
 
-        $template = $files->createTemplate($current_team, $request->file('file'), [
-            'name' => $data['name'],
-            'default_kind' => $data['default_kind'] ?? null,
-            'is_history_tracked' => $request->boolean('is_history_tracked'),
-        ]);
+        try {
+            $template = $files->createTemplate($current_team, $upload, [
+                'name' => $data['name'],
+                'default_kind' => $data['default_kind'] ?? null,
+                'is_history_tracked' => $request->boolean('is_history_tracked'),
+            ]);
+        } finally {
+            $this->forgetTemporaryUpload($upload, $request);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __(':name added. Check the suggested preset.', ['name' => $template->name])]);
 
         return back();
     }
 
-    public function update(Request $request, Team $current_team, SlideTemplate $template): RedirectResponse
+    public function update(Request $request, Team $current_team, SlideTemplate $template, SlideFormats $formats): RedirectResponse
     {
         $this->authorizeTemplate($current_team, $template);
         $data = $request->validate($this->metadataRules());
+        $kind = $data['default_kind'] ?? null;
+
+        if ($mismatch = $formats->kindRequiresFormat($kind, $template->format)) {
+            throw ValidationException::withMessages(['default_kind' => $mismatch]);
+        }
 
         $template->update([
             'name' => $data['name'],
-            'default_kind' => $data['default_kind'] ?? null,
+            'default_kind' => $kind,
             'is_history_tracked' => $request->boolean('is_history_tracked'),
         ]);
 
@@ -77,12 +90,17 @@ class TemplateController extends Controller
         return back();
     }
 
-    public function replaceFile(Request $request, Team $current_team, SlideTemplate $template, SlideFiles $files): RedirectResponse
+    public function replaceFile(Request $request, Team $current_team, SlideTemplate $template, SlideFiles $files, SlideLinkDownloader $links, SlideFormats $formats): RedirectResponse
     {
         $this->authorizeTemplate($current_team, $template);
-        $request->validate(['file' => ['required', 'file', 'max:102400', new PresentationFile($template->format)]]);
+        $upload = $this->presentationUpload($request, $links, $formats, $template->format, $template->default_kind);
 
-        $files->replaceTemplate($template, $request->file('file'));
+        try {
+            $files->replaceTemplate($template, $upload);
+        } finally {
+            $this->forgetTemporaryUpload($upload, $request);
+        }
+
         $missing = $template->slides()->where('missing', true)->count();
 
         Inertia::flash('toast', $missing > 0
@@ -118,5 +136,12 @@ class TemplateController extends Controller
     private function authorizeTemplate(Team $team, SlideTemplate $template): void
     {
         abort_unless($template->team_id === $team->id, 404);
+    }
+
+    private function forgetTemporaryUpload(UploadedFile $upload, Request $request): void
+    {
+        if (! $request->hasFile('file')) {
+            @unlink($upload->getRealPath());
+        }
     }
 }

@@ -78,8 +78,8 @@ Allow the website that plays the recordings to read the HLS files. On the public
 
 ## Service slides
 
-Upload ODP files for songs (saved from Impress) and PPTX files for liturgy (saved from PowerPoint). A template is one or the other, and its decks only take library items in the same format. The app merges template slides and library items into one file per deck, in the template's format. It does not edit slide text.
+Songs must be ODP (saved from Impress); liturgy must be PPTX (saved from PowerPoint). Upload a file or paste a Dropbox or Google Drive share link. A template is one format or the other, and its decks only take library items in the same format. The app merges template slides and library items into one file per deck, in the template's format. It does not edit slide text.
 
 An agent can call `POST /mcp/services`. Claude signs in with OAuth: add that URL as a custom connector, then approve one congregation. The server publishes the OAuth discovery documents, dynamic client registration, and PKCE that Claude's connector expects. Run `php artisan passport:keys` once on each server so Passport can issue tokens; the key files stay out of git.
 
-Scripts that cannot open a browser can still send a Sanctum token from Slide access. Create the token in that congregation; it is limited to the `service-slides` ability and that congregation id. The tools are `search-library`, `list-templates`, `list-services`, `get-service`, `upsert-service-deck`, `add-alias`, `add-library-item`, and `generate-deck`. `add-library-item` stores an ODP or PPTX file in the connected congregation's library from base64 or a Dropbox link.
+Scripts that cannot open a browser can still send a Sanctum token from Slide access. Create the token in that congregation; it is limited to the `service-slides` ability and that congregation id. The tools are `search-library`, `list-templates`, `list-services`, `get-service`, `upsert-service-deck`, `add-alias`, `add-library-item`, and `generate-deck`. `add-library-item` stores an ODP or PPTX file in the connected congregation's library from base64, a Dropbox link, or a Google Drive share/view/edit link.

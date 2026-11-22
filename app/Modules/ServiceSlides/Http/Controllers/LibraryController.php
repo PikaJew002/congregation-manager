@@ -8,15 +8,21 @@ use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Models\ServiceDeckEntry;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideSourceAlias;
-use App\Modules\ServiceSlides\Support\PresentationFile;
+use App\Modules\ServiceSlides\Support\ResolvesPresentationUpload;
+use App\Modules\ServiceSlides\Support\SlideFormats;
+use App\Modules\ServiceSlides\Support\SlideLinkDownloader;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class LibraryController extends Controller
 {
+    use ResolvesPresentationUpload;
+
     public function index(Team $current_team): Response
     {
         $lastUsed = ServiceDeckEntry::query()
@@ -36,24 +42,32 @@ class LibraryController extends Controller
         ]);
     }
 
-    public function store(Request $request, Team $current_team, SlideFiles $files): RedirectResponse
+    public function store(Request $request, Team $current_team, SlideFiles $files, SlideLinkDownloader $links, SlideFormats $formats): RedirectResponse
     {
-        $data = $request->validate([
-            ...$this->metadataRules(),
-            'file' => ['required', 'file', 'max:102400', new PresentationFile],
-        ]);
+        $data = $request->validate($this->metadataRules());
+        $upload = $this->presentationUpload($request, $links, $formats, kind: $data['kind']);
 
-        $source = $files->createSource($current_team, $request->file('file'), collect($data)->except('file')->all());
+        try {
+            $source = $files->createSource($current_team, $upload, collect($data)->all());
+        } finally {
+            $this->forgetTemporaryUpload($upload, $request);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __(':title added to the library.', ['title' => $source->title])]);
 
         return back();
     }
 
-    public function update(Request $request, Team $current_team, SlideSource $source, SlideFiles $files): RedirectResponse
+    public function update(Request $request, Team $current_team, SlideSource $source, SlideFiles $files, SlideFormats $formats): RedirectResponse
     {
         $this->authorizeSource($current_team, $source);
-        $source->update($request->validate($this->metadataRules()));
+        $data = $request->validate($this->metadataRules());
+
+        if ($mismatch = $formats->kindRequiresFormat($data['kind'], $source->original_format)) {
+            throw ValidationException::withMessages(['kind' => $mismatch]);
+        }
+
+        $source->update($data);
 
         if ($source->wasChanged('kind')) {
             $files->reformatSource($source);
@@ -64,12 +78,16 @@ class LibraryController extends Controller
         return back();
     }
 
-    public function replaceFile(Request $request, Team $current_team, SlideSource $source, SlideFiles $files): RedirectResponse
+    public function replaceFile(Request $request, Team $current_team, SlideSource $source, SlideFiles $files, SlideLinkDownloader $links, SlideFormats $formats): RedirectResponse
     {
         $this->authorizeSource($current_team, $source);
-        $request->validate(['file' => ['required', 'file', 'max:102400', new PresentationFile($source->original_format)]]);
+        $upload = $this->presentationUpload($request, $links, $formats, $source->original_format, $source->kind);
 
-        $files->replaceSource($source, $request->file('file'));
+        try {
+            $files->replaceSource($source, $upload);
+        } finally {
+            $this->forgetTemporaryUpload($upload, $request);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('File replaced. Decks that use it need to be generated again.')]);
 
@@ -130,5 +148,12 @@ class LibraryController extends Controller
     private function authorizeSource(Team $team, SlideSource $source): void
     {
         abort_unless($source->team_id === $team->id, 404);
+    }
+
+    private function forgetTemporaryUpload(UploadedFile $upload, Request $request): void
+    {
+        if (! $request->hasFile('file')) {
+            @unlink($upload->getRealPath());
+        }
     }
 }

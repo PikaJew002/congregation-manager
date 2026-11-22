@@ -56,6 +56,8 @@ let meta = ref({
     is_history_tracked: false,
 });
 let uploading = ref(false);
+let replaceUrl = ref('');
+let replaceUrlError = ref('');
 
 let selected = computed(
     () =>
@@ -132,6 +134,7 @@ const replaceFile = (event: Event) => {
     }
 
     uploading.value = true;
+    replaceUrlError.value = '';
     router.visit(file([teamSlug.value, selected.value.id]), {
         data: { file: chosen },
         forceFormData: true,
@@ -139,6 +142,34 @@ const replaceFile = (event: Event) => {
         onFinish: () => {
             uploading.value = false;
             input.value = '';
+        },
+    });
+};
+
+const replaceFromUrl = () => {
+    if (!selected.value) {
+        return;
+    }
+
+    const url = replaceUrl.value.trim();
+
+    if (!url) {
+        return;
+    }
+
+    uploading.value = true;
+    replaceUrlError.value = '';
+    router.visit(file([teamSlug.value, selected.value.id]), {
+        data: { url },
+        preserveScroll: true,
+        onError: (errors) => {
+            replaceUrlError.value = String(errors.url ?? '');
+        },
+        onSuccess: () => {
+            replaceUrl.value = '';
+        },
+        onFinish: () => {
+            uploading.value = false;
         },
     });
 };
@@ -197,17 +228,6 @@ const sourcesForKind = (kind: string | null) =>
         >
             <Heading variant="small" title="Upload a template" />
             <div class="grid gap-4 sm:grid-cols-2">
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="file">ODP or PPTX file</Label>
-                    <Input
-                        id="file"
-                        type="file"
-                        name="file"
-                        accept=".odp,.pptx"
-                        required
-                    />
-                    <InputError :message="errors.file" />
-                </div>
                 <div class="grid gap-2">
                     <Label for="name">Name</Label>
                     <Input id="name" name="name" required placeholder="Music" />
@@ -229,6 +249,29 @@ const sourcesForKind = (kind: string | null) =>
                             {{ label }}
                         </option>
                     </select>
+                    <p class="text-xs text-muted-foreground">
+                        Song templates need ODP; liturgy templates need PPTX.
+                    </p>
+                </div>
+                <div class="grid gap-2 sm:col-span-2">
+                    <Label for="file">ODP or PPTX file</Label>
+                    <Input
+                        id="file"
+                        type="file"
+                        name="file"
+                        accept=".odp,.pptx"
+                    />
+                    <InputError :message="errors.file" />
+                </div>
+                <div class="grid gap-2 sm:col-span-2">
+                    <Label for="url">Or Dropbox / Google Drive link</Label>
+                    <Input
+                        id="url"
+                        type="url"
+                        name="url"
+                        placeholder="https://…"
+                    />
+                    <InputError :message="errors.url" />
                 </div>
                 <label class="flex items-center gap-2 text-sm sm:col-span-2">
                     <input
@@ -240,7 +283,7 @@ const sourcesForKind = (kind: string | null) =>
                     Track library items from this template in history
                 </label>
             </div>
-            <Button type="submit" :disabled="processing">Upload</Button>
+            <Button type="submit" :disabled="processing">Add</Button>
         </Form>
 
         <p
@@ -282,21 +325,45 @@ const sourcesForKind = (kind: string | null) =>
                         class="flex flex-wrap items-center justify-between gap-3"
                     >
                         <Heading variant="small" title="Details" />
-                        <label
-                            class="inline-flex h-8 cursor-pointer items-center rounded-md border border-input px-3 text-sm hover:bg-accent"
-                            :class="{
-                                'pointer-events-none opacity-50': uploading,
-                            }"
-                        >
-                            {{ uploading ? 'Uploading…' : 'Replace file' }}
-                            <input
-                                type="file"
-                                :accept="`.${selected.format}`"
-                                class="sr-only"
-                                @change="replaceFile"
-                            />
-                        </label>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <label
+                                class="inline-flex h-8 cursor-pointer items-center rounded-md border border-input px-3 text-sm hover:bg-accent"
+                                :class="{
+                                    'pointer-events-none opacity-50': uploading,
+                                }"
+                            >
+                                {{ uploading ? 'Uploading…' : 'Replace file' }}
+                                <input
+                                    type="file"
+                                    :accept="`.${selected.format}`"
+                                    class="sr-only"
+                                    @change="replaceFile"
+                                />
+                            </label>
+                        </div>
                     </div>
+                    <div class="flex max-w-xl flex-wrap gap-2">
+                        <Input
+                            v-model="replaceUrl"
+                            type="url"
+                            class="min-w-0 flex-1"
+                            placeholder="Or paste Dropbox / Drive link"
+                            :disabled="uploading"
+                            @keydown.enter.prevent="replaceFromUrl"
+                        />
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            :disabled="uploading || !replaceUrl.trim()"
+                            @click="replaceFromUrl"
+                        >
+                            Replace from link
+                        </Button>
+                    </div>
+                    <InputError
+                        v-if="replaceUrlError"
+                        :message="replaceUrlError"
+                    />
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div class="grid gap-2">
                             <Label>Name</Label>
