@@ -6,7 +6,7 @@ This spec replaces the first-pass build, where deck order came from slide roles 
 
 ## Concepts
 
-- **Library item** (`slide_sources`): one ODP or PPTX file (`original_format`), such as a song, Psalm 19, or the Shema. It has a kind (song, liturgy, or other), aliases, a slide count, and the first line of text on each slide.
+- **Library item** (`slide_sources`): one ODP or PPTX file (`original_format`), such as a song, Psalm 19, or the Shema. It has a kind (song, liturgy, or other), aliases, a slide count, and the first line of text on each slide. The same title can belong to different kinds, such as a song and a liturgy item both named Adon Olam. A second active item of the same kind cannot reuse a title.
 - **Template** (`slide_templates`): one ODP or PPTX file (`format`) that supplies the look of the deck (masters, page size) and its structural slides (Welcome, Blank, Congregational Prayer, Torah Service, D'Var Torah). Each slide has a label.
 - **Preset**: stored on the template. It is the default arrangement used to fill a new deck. It is made of steps.
 - **Deck entries** (`service_deck_entries`): the actual ordered list for one deck. After a deck is created, its entries are the source of truth. Editing the preset later does not change existing decks.
@@ -124,8 +124,10 @@ Files can now be replaced, both library items and templates. Replacing a file re
 
 ## MCP and import
 
-- `list_templates` returns each template's format and slots (key, label, kind, repeat). `search_library` returns each item's format.
-- `add_library_item` takes ODP or PPTX. A missing title comes from the first line of the first slide; a missing author comes from the second line for songs only.
+- `list_templates` returns each template's format, slides (index, label, role), and preset steps in order. A slide step names a template slide by label. A slot step includes its key, label, kind, repeat, separator label, and default library titles. It also keeps the slots summary (key, label, kind, repeat). `search_library` returns each item's format.
+- `create_template` takes a base ODP or PPTX file, as base64 or a Dropbox or Google Drive link, plus a name and default kind. Optional steps replace the suggested preset. Without steps, the stored suggestion is the structural slides around one repeating slot.
+- `set_preset` replaces a template's ordered steps. Copy the current steps and insert a slot; steps you omit are removed. Slide steps use labels. Slot defaults are library titles, matched the same way as deck titles, in the template's format. An unknown or ambiguous label, or an unmatched default title, rejects the save. A saved preset applies to decks created afterward. Existing decks keep their entries.
+- `add_library_item` takes ODP or PPTX. A missing title comes from the first line of the first slide; a missing author comes from the second line for songs only. A title already used by another kind is accepted. The same kind is rejected.
 - `upsert_service_deck` accepts `titles` (the short form) or `slots` (`{key: [titles]}`) and returns unmatched titles per slot.
 - CSV columns are `date,template,slot,titles`. Titles are separated with `|`. A blank slot uses the short form.
 
@@ -148,6 +150,7 @@ Files can now be replaced, both library items and templates. Replacing a file re
 - PPTX items built from one theme share one imported master.
 - Generate all queues one job per deck, and download all returns every ready deck.
 - The MCP `slots` form works, and so does the short form.
+- The MCP tools can create a template from a PPTX, place a liturgy slot between slide labels, reject an unknown label or unmatched default, and leave an existing deck's entries unchanged.
 
 ## Decisions
 

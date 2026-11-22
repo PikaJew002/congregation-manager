@@ -5,10 +5,10 @@ namespace App\Modules\ServiceSlides\Mcp\Tools;
 use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use App\Modules\ServiceSlides\Models\SlideSource;
+use App\Modules\ServiceSlides\Support\EncodedUpload;
 use App\Modules\ServiceSlides\Support\SlideFormats;
 use App\Modules\ServiceSlides\Support\SlideLinkDownloader;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\Rule;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -16,13 +16,14 @@ use Laravel\Mcp\Server\Tool;
 
 class AddLibraryItem extends Tool
 {
-    protected string $description = 'Add an ODP or PPTX file to this congregation\'s slide library. Songs must be ODP; liturgy must be PPTX. Send the file as base64, or send a Dropbox or Google Drive share/view/edit link (Drive file links from the Google Drive MCP are accepted). When title is omitted, line one of the first slide supplies it; for songs, line two supplies a missing author.';
+    protected string $description = 'Add an ODP or PPTX file to this congregation\'s slide library. Songs must be ODP; liturgy must be PPTX. The same title can be used for a different kind, such as a song and a liturgy item both named Adon Olam. A second active item of the same kind cannot reuse a title. Send the file as base64, or send a Dropbox or Google Drive share/view/edit link (Drive file links from the Google Drive MCP are accepted). When title is omitted, line one of the first slide supplies it; for songs, line two supplies a missing author.';
 
     public function __construct(
         private CongregationContext $context,
         private SlideFiles $files,
         private SlideFormats $formats,
         private SlideLinkDownloader $links,
+        private EncodedUpload $uploads,
     ) {}
 
     public function schema(JsonSchema $schema): array
@@ -59,7 +60,7 @@ class AddLibraryItem extends Tool
         ]);
 
         $upload = filled($data['file'] ?? null)
-            ? $this->decodeUpload($data['file'])
+            ? $this->uploads->decode($data['file'])
             : $this->links->download($data['url']);
 
         if (is_string($upload)) {
@@ -90,10 +91,8 @@ class AddLibraryItem extends Tool
                 return Response::error('The first slide has no title line.');
             }
 
-            $existing = SlideSource::query()->forTeam($team)->where('title', $title)->where('original_format', $format)->where('archived', false)->first();
-
-            if ($existing) {
-                return Response::error($title.' is already in this congregation\'s library as '.SlideFormats::LABELS[$format].'.');
+            if (SlideSource::activeDuplicate($team, $title, $data['kind'])) {
+                return Response::error(SlideSource::duplicateMessage($title, $data['kind']));
             }
 
             $source = $this->files->createSource($team, $upload, [
@@ -126,34 +125,5 @@ class AddLibraryItem extends Tool
             'slide_count' => $source->slide_count,
             'aliases' => $source->aliases->pluck('alias')->all(),
         ]);
-    }
-
-    private function decodeUpload(string $encoded): UploadedFile|string
-    {
-        $encoded = preg_replace('/\s+/', '', $encoded) ?? '';
-
-        if (str_starts_with($encoded, 'data:') && str_contains($encoded, ',')) {
-            $encoded = substr($encoded, (int) strpos($encoded, ',') + 1);
-        }
-
-        $bytes = base64_decode($encoded, true);
-
-        if ($bytes === false || $bytes === '') {
-            return 'The file must be a base64-encoded ODP or PPTX.';
-        }
-
-        if (strlen($bytes) > 102400 * 1024) {
-            return 'The file is larger than 100 MB.';
-        }
-
-        $temporary = tempnam(sys_get_temp_dir(), 'library-');
-
-        if ($temporary === false) {
-            return 'The file could not be stored.';
-        }
-
-        file_put_contents($temporary, $bytes);
-
-        return new UploadedFile($temporary, 'library', null, null, true);
     }
 }

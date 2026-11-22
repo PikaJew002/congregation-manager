@@ -47,6 +47,7 @@ let kindFilter = ref('all');
 let showArchived = ref(false);
 let expandedId = ref<number | null>(null);
 let editingId = ref<number | null>(null);
+let editError = ref('');
 let editForm = ref({
     title: '',
     kind: 'song',
@@ -87,6 +88,7 @@ let filtered = computed(() => {
 
 const startEdit = (source: SlideSource) => {
     editingId.value = source.id;
+    editError.value = '';
     editForm.value = {
         title: source.title,
         kind: source.kind,
@@ -97,10 +99,16 @@ const startEdit = (source: SlideSource) => {
 };
 
 const saveEdit = (source: SlideSource) => {
+    editError.value = '';
     router.visit(update([teamSlug.value, source.id]), {
         data: editForm.value,
         preserveScroll: true,
-        onSuccess: () => (editingId.value = null),
+        onError: (errors) => {
+            editError.value = String(errors.title ?? '');
+        },
+        onSuccess: () => {
+            editingId.value = null;
+        },
     });
 };
 
@@ -361,6 +369,7 @@ const replaceFromUrl = (source: SlideSource) => {
                             <div class="grid gap-2">
                                 <Label>Title</Label>
                                 <Input v-model="editForm.title" required />
+                                <InputError :message="editError" />
                             </div>
                             <div class="grid gap-2">
                                 <Label>Kind</Label>
