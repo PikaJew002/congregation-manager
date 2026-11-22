@@ -183,8 +183,9 @@ class ServiceSlidesMcpTest extends TestCase
         $owner->withAccessToken($token->accessToken);
         SlideSource::query()->create([
             'team_id' => $team->id,
-            'kind' => 'liturgy',
+            'kind' => 'song',
             'title' => 'Adon Olam p 110-111',
+            'original_format' => 'odp',
             'original_path' => 'slides/adon-olam.odp',
             'file_path' => 'slides/adon-olam.odp',
             'slide_count' => 1,
@@ -314,7 +315,7 @@ class ServiceSlidesMcpTest extends TestCase
         [$first, $second] = $this->twoLabels();
         SlideSource::query()->create([
             'team_id' => $team->id,
-            'kind' => 'liturgy',
+            'kind' => 'song',
             'title' => 'Adon Olam',
             'original_format' => 'odp',
             'original_path' => 'slides/adon.odp',
