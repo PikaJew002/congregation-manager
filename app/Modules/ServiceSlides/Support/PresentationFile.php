@@ -8,7 +8,7 @@ use Illuminate\Http\UploadedFile;
 
 class PresentationFile implements ValidationRule
 {
-    public function __construct(private ?string $format = null) {}
+    public function __construct(private ?string $format = null, private ?string $kind = null) {}
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
@@ -18,7 +18,7 @@ class PresentationFile implements ValidationRule
             return;
         }
 
-        $rejection = app(SlideFormats::class)->rejection($value->getRealPath(), $this->format);
+        $rejection = app(SlideFormats::class)->rejection($value->getRealPath(), $this->format, $this->kind);
 
         if ($rejection !== null) {
             $fail($rejection);

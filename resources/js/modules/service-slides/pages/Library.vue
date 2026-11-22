@@ -56,6 +56,8 @@ let editForm = ref({
 });
 let aliasText = ref('');
 let uploading = ref(false);
+let replaceUrl = ref('');
+let replaceUrlError = ref('');
 
 let filtered = computed(() => {
     const term = search.value.trim().toLowerCase();
@@ -140,6 +142,7 @@ const replaceFile = (source: SlideSource, event: Event) => {
     }
 
     uploading.value = true;
+    replaceUrlError.value = '';
     router.visit(file([teamSlug.value, source.id]), {
         data: { file: chosen },
         forceFormData: true,
@@ -147,6 +150,30 @@ const replaceFile = (source: SlideSource, event: Event) => {
         onFinish: () => {
             uploading.value = false;
             input.value = '';
+        },
+    });
+};
+
+const replaceFromUrl = (source: SlideSource) => {
+    const url = replaceUrl.value.trim();
+
+    if (!url) {
+        return;
+    }
+
+    uploading.value = true;
+    replaceUrlError.value = '';
+    router.visit(file([teamSlug.value, source.id]), {
+        data: { url },
+        preserveScroll: true,
+        onError: (errors) => {
+            replaceUrlError.value = String(errors.url ?? '');
+        },
+        onSuccess: () => {
+            replaceUrl.value = '';
+        },
+        onFinish: () => {
+            uploading.value = false;
         },
     });
 };
@@ -158,7 +185,7 @@ const replaceFile = (source: SlideSource, event: Event) => {
     <div class="flex flex-col space-y-10 p-4">
         <Heading
             title="Slide library"
-            description="ODP files for songs and PPTX files for liturgy. A deck only uses files in its template's format."
+            description="Songs are ODP; liturgy is PPTX. Upload a file or paste a Dropbox or Google Drive share link. A deck only uses files in its template's format."
         />
 
         <Form
@@ -166,58 +193,77 @@ const replaceFile = (source: SlideSource, event: Event) => {
             class="max-w-3xl space-y-4 rounded-lg border p-4"
             reset-on-success
             :options="{ preserveScroll: true }"
-            v-slot="{ errors, processing }"
         >
-            <Heading variant="small" title="Add to library" />
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="file">ODP or PPTX file</Label>
-                    <Input
-                        id="file"
-                        type="file"
-                        name="file"
-                        accept=".odp,.pptx"
-                        required
-                    />
-                    <InputError :message="errors.file" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="title">Title</Label>
-                    <Input id="title" name="title" required />
-                    <InputError :message="errors.title" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="kind">Kind</Label>
-                    <select id="kind" name="kind" required :class="selectClass">
-                        <option
-                            v-for="(label, key) in kinds"
-                            :key="key"
-                            :value="key"
+            <template #default="{ errors, processing }">
+                <Heading variant="small" title="Add to library" />
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="grid gap-2">
+                        <Label for="kind">Kind</Label>
+                        <select
+                            id="kind"
+                            name="kind"
+                            required
+                            :class="selectClass"
                         >
-                            {{ label }}
-                        </option>
-                    </select>
-                    <InputError :message="errors.kind" />
+                            <option
+                                v-for="(label, key) in kinds"
+                                :key="key"
+                                :value="key"
+                            >
+                                {{ label }}
+                            </option>
+                        </select>
+                        <InputError :message="errors.kind" />
+                        <p class="text-xs text-muted-foreground">
+                            Song = ODP. Liturgy = PPTX.
+                        </p>
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="title">Title</Label>
+                        <Input id="title" name="title" required />
+                        <InputError :message="errors.title" />
+                    </div>
+                    <div class="grid gap-2 sm:col-span-2">
+                        <Label for="file">ODP or PPTX file</Label>
+                        <Input
+                            id="file"
+                            type="file"
+                            name="file"
+                            accept=".odp,.pptx"
+                        />
+                        <InputError :message="errors.file" />
+                    </div>
+                    <div class="grid gap-2 sm:col-span-2">
+                        <Label for="url">Or Dropbox / Google Drive link</Label>
+                        <input
+                            id="url"
+                            type="url"
+                            name="url"
+                            placeholder="https://..."
+                            class="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                        />
+                        <InputError :message="errors.url" />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="author">Author (optional)</Label>
+                        <Input id="author" name="author" />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="ccli">CCLI (optional)</Label>
+                        <Input id="ccli" name="ccli" />
+                    </div>
+                    <div class="grid gap-2 sm:col-span-2">
+                        <Label for="notes">Notes (optional)</Label>
+                        <textarea
+                            id="notes"
+                            name="notes"
+                            rows="2"
+                            class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                        />
+                    </div>
                 </div>
-                <div class="grid gap-2">
-                    <Label for="author">Author (optional)</Label>
-                    <Input id="author" name="author" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="ccli">CCLI (optional)</Label>
-                    <Input id="ccli" name="ccli" />
-                </div>
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="notes">Notes (optional)</Label>
-                    <textarea
-                        id="notes"
-                        name="notes"
-                        rows="2"
-                        class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-                    />
-                </div>
-            </div>
-            <Button type="submit" :disabled="processing">Upload</Button>
+                <Button type="submit" :disabled="processing">Add</Button>
+            </template>
         </Form>
 
         <div class="space-y-4">
@@ -388,6 +434,30 @@ const replaceFile = (source: SlideSource, event: Event) => {
                                     @change="replaceFile(source, $event)"
                                 />
                             </label>
+                            <div class="flex w-full max-w-xl flex-wrap gap-2">
+                                <Input
+                                    v-model="replaceUrl"
+                                    type="url"
+                                    class="min-w-0 flex-1"
+                                    placeholder="Or paste Dropbox / Drive link"
+                                    :disabled="uploading"
+                                    @keydown.enter.prevent="
+                                        replaceFromUrl(source)
+                                    "
+                                />
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    :disabled="uploading || !replaceUrl.trim()"
+                                    @click="replaceFromUrl(source)"
+                                >
+                                    Replace from link
+                                </Button>
+                            </div>
+                            <InputError
+                                v-if="replaceUrlError"
+                                :message="replaceUrlError"
+                            />
                         </div>
 
                         <div class="space-y-2">

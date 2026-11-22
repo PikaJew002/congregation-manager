@@ -25,9 +25,34 @@ class SlideFormats
     }
 
     /**
+     * Songs are ODP; liturgy is PPTX. Other kinds (and templates without a default kind) accept either.
+     */
+    public function formatForKind(?string $kind): ?string
+    {
+        return match ($kind) {
+            'song' => 'odp',
+            'liturgy' => 'pptx',
+            default => null,
+        };
+    }
+
+    public function kindRequiresFormat(?string $kind, string $format): ?string
+    {
+        $expected = $this->formatForKind($kind);
+
+        if ($expected === null || $expected === $format) {
+            return null;
+        }
+
+        return $kind === 'song'
+            ? 'Songs must be ODP files.'
+            : 'Liturgy must be PPTX files.';
+    }
+
+    /**
      * Null when the file is an ODP or PPTX presentation (of the expected format, when given), or a message explaining why not.
      */
-    public function rejection(string $path, ?string $expected = null): ?string
+    public function rejection(string $path, ?string $expected = null, ?string $kind = null): ?string
     {
         [$format, $problem] = $this->inspect($path);
 
@@ -35,7 +60,13 @@ class SlideFormats
             return $problem;
         }
 
+        $expected ??= $this->formatForKind($kind);
+
         if ($expected !== null && $format !== $expected) {
+            if ($kindMismatch = $this->kindRequiresFormat($kind, (string) $format)) {
+                return $kindMismatch;
+            }
+
             return 'This uses a '.self::LABELS[$expected].' file, so the replacement must be '.self::LABELS[$expected].' too.';
         }
 

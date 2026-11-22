@@ -157,17 +157,22 @@ class ServiceSlidesMcpTest extends TestCase
         [$team, $owner] = $this->owner();
         $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
         $owner->withAccessToken($token->accessToken);
-        $bytes = (string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'));
+        $odp = (string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'));
+        $pptx = (string) file_get_contents(base_path('tests/Fixtures/slides/adon-olam.pptx'));
         $requested = null;
 
-        Http::fake(function ($request) use ($bytes, &$requested) {
+        Http::fake(function ($request) use ($odp, $pptx, &$requested) {
             $requested = $request->url();
 
             if (str_contains($request->url(), 'preview.odp')) {
                 return Http::response('<!DOCTYPE html><html></html>', 200, ['Content-Type' => 'text/html']);
             }
 
-            return Http::response($bytes, 200, ['Content-Type' => 'application/octet-stream']);
+            if (str_contains($request->url(), 'drive.google.com/uc')) {
+                return Http::response($pptx, 200, ['Content-Type' => 'application/octet-stream']);
+            }
+
+            return Http::response($odp, 200, ['Content-Type' => 'application/octet-stream']);
         });
 
         ServiceSlidesServer::actingAs($owner)
@@ -191,7 +196,7 @@ class ServiceSlidesMcpTest extends TestCase
                 'kind' => 'song',
                 'url' => 'https://example.com/song.odp',
             ])
-            ->assertHasErrors(['https Dropbox link']);
+            ->assertHasErrors(['Dropbox or Google Drive']);
 
         ServiceSlidesServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
@@ -201,7 +206,15 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertHasErrors(['web page']);
 
-        Http::assertSentCount(2);
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'kind' => 'liturgy',
+                'url' => 'https://drive.google.com/file/d/1aOlcIaIVhPZBiJoOiePH1ralnX-Xh1wo/view',
+            ])
+            ->assertOk()
+            ->assertSee('pptx');
+
+        $this->assertTrue(collect(Http::recorded())->contains(fn ($pair) => str_contains($pair[0]->url(), 'drive.google.com/uc?export=download&id=1aOlcIaIVhPZBiJoOiePH1ralnX-Xh1wo')));
     }
 
     public function test_a_missing_title_and_artist_come_from_the_first_slide(): void

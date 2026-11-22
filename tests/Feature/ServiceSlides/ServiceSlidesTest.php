@@ -14,6 +14,7 @@ use App\Modules\ServiceSlides\Support\PptxInspector;
 use App\Support\Modules\ModuleAccess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 use ZipArchive;
@@ -72,7 +73,7 @@ class ServiceSlidesTest extends TestCase
 
         $this->actingAs($owner)
             ->post(route('service-slides.library.file', [$team, $source]), ['file' => $this->upload('psalm-19.odp')])
-            ->assertSessionHasErrors(['file' => 'This uses a PPTX file, so the replacement must be PPTX too.']);
+            ->assertSessionHasErrors(['file' => 'Liturgy must be PPTX files.']);
 
         $this->actingAs($owner)
             ->post(route('service-slides.library.file', [$team, $source]), ['file' => $this->upload('adon-olam.pptx')])
@@ -152,14 +153,20 @@ class ServiceSlidesTest extends TestCase
             ->assertSessionHasNoErrors();
         $this->actingAs($owner)
             ->post(route('service-slides.library.store', $team), ['title' => 'Psalm 19', 'kind' => 'liturgy', 'file' => $this->upload('psalm-19.odp')])
+            ->assertSessionHasErrors(['file' => 'Liturgy must be PPTX files.']);
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), ['title' => 'Kaddish', 'kind' => 'liturgy', 'file' => $this->upload('kaddish.pptx')])
             ->assertSessionHasNoErrors();
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), ['title' => 'Song as PPTX', 'kind' => 'song', 'file' => $this->upload('barchu.pptx')])
+            ->assertSessionHasErrors(['file' => 'Songs must be ODP files.']);
 
         $song = SlideSource::query()->where('title', 'Kumi Ori')->firstOrFail();
         $this->assertNotSame($song->original_path, $song->file_path);
         $this->assertSame(file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp')), Storage::disk('files')->get($song->original_path));
         $this->assertNotSame(Storage::disk('files')->get($song->original_path), Storage::disk('files')->get($song->file_path));
 
-        $liturgy = SlideSource::query()->where('title', 'Psalm 19')->firstOrFail();
+        $liturgy = SlideSource::query()->where('title', 'Kaddish')->firstOrFail();
         $this->assertSame($liturgy->original_path, $liturgy->file_path);
 
         $formatted = $song->file_path;
@@ -168,6 +175,59 @@ class ServiceSlidesTest extends TestCase
             ->assertSessionHasNoErrors();
         $this->assertSame($song->original_path, $song->fresh()->file_path);
         Storage::disk('files')->assertMissing($formatted);
+    }
+
+    public function test_a_dropbox_or_drive_link_can_add_library_and_template_files(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+        $odp = (string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'));
+        $pptx = (string) file_get_contents(base_path('tests/Fixtures/slides/kaddish.pptx'));
+        $requested = [];
+
+        Http::fake(function ($request) use ($odp, $pptx, &$requested) {
+            $requested[] = $request->url();
+
+            if (str_contains($request->url(), 'drive.google.com/uc')) {
+                return Http::response($pptx, 200, [
+                    'Content-Type' => 'application/octet-stream',
+                    'Content-Disposition' => 'attachment; filename="Kaddish.pptx"',
+                ]);
+            }
+
+            return Http::response($odp, 200, ['Content-Type' => 'application/octet-stream']);
+        });
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), [
+                'title' => 'From Dropbox',
+                'kind' => 'song',
+                'url' => 'https://www.dropbox.com/scl/fi/abc/kumi-ori.odp?rlkey=secret&st=token&dl=0',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), [
+                'title' => 'From Drive',
+                'kind' => 'liturgy',
+                'url' => 'https://docs.google.com/presentation/d/1Ug67oy8xtZl-4sEj5a4Db6-PNw9tikmc/edit?usp=sharing',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.templates.store', $team), [
+                'name' => 'Liturgy from Drive',
+                'default_kind' => 'liturgy',
+                'url' => 'https://drive.google.com/file/d/1aOlcIaIVhPZBiJoOiePH1ralnX-Xh1wo/view',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue(collect($requested)->contains(fn (string $url) => str_contains($url, 'dl=1') && ! str_contains($url, 'st=')));
+        $this->assertTrue(collect($requested)->contains('https://drive.google.com/uc?export=download&id=1Ug67oy8xtZl-4sEj5a4Db6-PNw9tikmc'));
+        $this->assertTrue(collect($requested)->contains('https://drive.google.com/uc?export=download&id=1aOlcIaIVhPZBiJoOiePH1ralnX-Xh1wo'));
+        $this->assertSame('odp', SlideSource::query()->where('title', 'From Dropbox')->value('original_format'));
+        $this->assertSame('pptx', SlideSource::query()->where('title', 'From Drive')->value('original_format'));
+        $this->assertSame('pptx', SlideTemplate::query()->where('name', 'Liturgy from Drive')->value('format'));
     }
 
     public function test_the_format_command_formats_songs_added_before_import_formatting(): void
