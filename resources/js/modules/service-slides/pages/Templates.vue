@@ -224,66 +224,76 @@ const sourcesForKind = (kind: string | null) =>
             class="max-w-3xl space-y-4 rounded-lg border p-4"
             reset-on-success
             :options="{ preserveScroll: true }"
-            v-slot="{ errors, processing }"
         >
-            <Heading variant="small" title="Upload a template" />
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div class="grid gap-2">
-                    <Label for="name">Name</Label>
-                    <Input id="name" name="name" required placeholder="Music" />
-                    <InputError :message="errors.name" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="default_kind">Default kind</Label>
-                    <select
-                        id="default_kind"
-                        name="default_kind"
-                        :class="selectClass"
-                    >
-                        <option value="">None</option>
-                        <option
-                            v-for="(label, key) in kinds"
-                            :key="key"
-                            :value="key"
+            <template #default="{ errors, processing }">
+                <Heading variant="small" title="Upload a template" />
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="grid gap-2">
+                        <Label for="name">Name</Label>
+                        <Input
+                            id="name"
+                            name="name"
+                            required
+                            placeholder="Music"
+                        />
+                        <InputError :message="errors.name" />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="default_kind">Default kind</Label>
+                        <select
+                            id="default_kind"
+                            name="default_kind"
+                            :class="selectClass"
                         >
-                            {{ label }}
-                        </option>
-                    </select>
-                    <p class="text-xs text-muted-foreground">
-                        Song templates need ODP; liturgy templates need PPTX.
-                    </p>
+                            <option value="">None</option>
+                            <option
+                                v-for="(label, key) in kinds"
+                                :key="key"
+                                :value="key"
+                            >
+                                {{ label }}
+                            </option>
+                        </select>
+                        <p class="text-xs text-muted-foreground">
+                            Song templates need ODP; liturgy templates need
+                            PPTX.
+                        </p>
+                    </div>
+                    <div class="grid gap-2 sm:col-span-2">
+                        <Label for="file">ODP or PPTX file</Label>
+                        <Input
+                            id="file"
+                            type="file"
+                            name="file"
+                            accept=".odp,.pptx"
+                        />
+                        <InputError :message="errors.file" />
+                    </div>
+                    <div class="grid gap-2 sm:col-span-2">
+                        <Label for="url">Or Dropbox / Google Drive link</Label>
+                        <input
+                            id="url"
+                            type="url"
+                            name="url"
+                            placeholder="https://..."
+                            class="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                        />
+                        <InputError :message="errors.url" />
+                    </div>
+                    <label
+                        class="flex items-center gap-2 text-sm sm:col-span-2"
+                    >
+                        <input
+                            type="checkbox"
+                            name="is_history_tracked"
+                            value="1"
+                            class="rounded"
+                        />
+                        Track library items from this template in history
+                    </label>
                 </div>
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="file">ODP or PPTX file</Label>
-                    <Input
-                        id="file"
-                        type="file"
-                        name="file"
-                        accept=".odp,.pptx"
-                    />
-                    <InputError :message="errors.file" />
-                </div>
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="url">Or Dropbox / Google Drive link</Label>
-                    <Input
-                        id="url"
-                        type="url"
-                        name="url"
-                        placeholder="https://…"
-                    />
-                    <InputError :message="errors.url" />
-                </div>
-                <label class="flex items-center gap-2 text-sm sm:col-span-2">
-                    <input
-                        type="checkbox"
-                        name="is_history_tracked"
-                        value="1"
-                        class="rounded"
-                    />
-                    Track library items from this template in history
-                </label>
-            </div>
-            <Button type="submit" :disabled="processing">Add</Button>
+                <Button type="submit" :disabled="processing">Add</Button>
+            </template>
         </Form>
 
         <p

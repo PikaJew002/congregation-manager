@@ -193,70 +193,77 @@ const replaceFromUrl = (source: SlideSource) => {
             class="max-w-3xl space-y-4 rounded-lg border p-4"
             reset-on-success
             :options="{ preserveScroll: true }"
-            v-slot="{ errors, processing }"
         >
-            <Heading variant="small" title="Add to library" />
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div class="grid gap-2">
-                    <Label for="kind">Kind</Label>
-                    <select id="kind" name="kind" required :class="selectClass">
-                        <option
-                            v-for="(label, key) in kinds"
-                            :key="key"
-                            :value="key"
+            <template #default="{ errors, processing }">
+                <Heading variant="small" title="Add to library" />
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="grid gap-2">
+                        <Label for="kind">Kind</Label>
+                        <select
+                            id="kind"
+                            name="kind"
+                            required
+                            :class="selectClass"
                         >
-                            {{ label }}
-                        </option>
-                    </select>
-                    <InputError :message="errors.kind" />
-                    <p class="text-xs text-muted-foreground">
-                        Song = ODP. Liturgy = PPTX.
-                    </p>
+                            <option
+                                v-for="(label, key) in kinds"
+                                :key="key"
+                                :value="key"
+                            >
+                                {{ label }}
+                            </option>
+                        </select>
+                        <InputError :message="errors.kind" />
+                        <p class="text-xs text-muted-foreground">
+                            Song = ODP. Liturgy = PPTX.
+                        </p>
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="title">Title</Label>
+                        <Input id="title" name="title" required />
+                        <InputError :message="errors.title" />
+                    </div>
+                    <div class="grid gap-2 sm:col-span-2">
+                        <Label for="file">ODP or PPTX file</Label>
+                        <Input
+                            id="file"
+                            type="file"
+                            name="file"
+                            accept=".odp,.pptx"
+                        />
+                        <InputError :message="errors.file" />
+                    </div>
+                    <div class="grid gap-2 sm:col-span-2">
+                        <Label for="url">Or Dropbox / Google Drive link</Label>
+                        <input
+                            id="url"
+                            type="url"
+                            name="url"
+                            placeholder="https://..."
+                            class="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                        />
+                        <InputError :message="errors.url" />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="author">Author (optional)</Label>
+                        <Input id="author" name="author" />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="ccli">CCLI (optional)</Label>
+                        <Input id="ccli" name="ccli" />
+                    </div>
+                    <div class="grid gap-2 sm:col-span-2">
+                        <Label for="notes">Notes (optional)</Label>
+                        <textarea
+                            id="notes"
+                            name="notes"
+                            rows="2"
+                            class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                        />
+                    </div>
                 </div>
-                <div class="grid gap-2">
-                    <Label for="title">Title</Label>
-                    <Input id="title" name="title" required />
-                    <InputError :message="errors.title" />
-                </div>
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="file">ODP or PPTX file</Label>
-                    <Input
-                        id="file"
-                        type="file"
-                        name="file"
-                        accept=".odp,.pptx"
-                    />
-                    <InputError :message="errors.file" />
-                </div>
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="url">Or Dropbox / Google Drive link</Label>
-                    <Input
-                        id="url"
-                        type="url"
-                        name="url"
-                        placeholder="https://…"
-                    />
-                    <InputError :message="errors.url" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="author">Author (optional)</Label>
-                    <Input id="author" name="author" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="ccli">CCLI (optional)</Label>
-                    <Input id="ccli" name="ccli" />
-                </div>
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="notes">Notes (optional)</Label>
-                    <textarea
-                        id="notes"
-                        name="notes"
-                        rows="2"
-                        class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-                    />
-                </div>
-            </div>
-            <Button type="submit" :disabled="processing">Add</Button>
+                <Button type="submit" :disabled="processing">Add</Button>
+            </template>
         </Form>
 
         <div class="space-y-4">
