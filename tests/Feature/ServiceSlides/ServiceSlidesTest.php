@@ -6,6 +6,7 @@ use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
 use App\Modules\ServiceSlides\Actions\ServicePlanner;
+use App\Modules\ServiceSlides\Http\Controllers\DeckController;
 use App\Modules\ServiceSlides\Jobs\GenerateServiceDeck;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
@@ -15,6 +16,7 @@ use App\Support\Modules\ModuleAccess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 use ZipArchive;
@@ -210,7 +212,14 @@ class ServiceSlidesTest extends TestCase
         $this->actingAs($owner)
             ->get(route('service-slides.decks.download', [$team, $deck]))
             ->assertOk()
-            ->assertDownload('2026-11-14 Liturgy.pptx');
+            ->assertDownload('26-11-14 Liturgy.pptx');
+
+        Queue::fake();
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.decks.generate', [$team, $deck]))
+            ->assertRedirect()
+            ->assertInertiaFlash('deck', $deck->id);
 
         $this->actingAs($owner)
             ->put(route('service-slides.decks.entries', [$team, $deck]), ['entries' => [
@@ -335,6 +344,7 @@ class ServiceSlidesTest extends TestCase
 
         $deck = $result['deck']->fresh();
         $this->assertSame('ready', $deck->status);
+        $this->assertSame('26-11-01 Music.odp', DeckController::fileName($deck));
         $this->assertFalse($deck->stale);
         Storage::disk('files')->assertExists($deck->generated_path);
 

@@ -24,7 +24,7 @@ class DeckController extends Controller
     {
         $extension = pathinfo((string) $deck->generated_path, PATHINFO_EXTENSION) ?: 'odp';
 
-        return $deck->service->service_date->toDateString().' '.Str::of($deck->name)->replaceMatches('/[\/\\\\:*?"<>|]+/', '-')->trim().'.'.$extension;
+        return $deck->service->service_date->format('y-m-d').' '.Str::of($deck->name)->replaceMatches('/[\/\\\\:*?"<>|]+/', '-')->trim().'.'.$extension;
     }
 
     public function update(Request $request, Team $current_team, ServiceDeck $deck): RedirectResponse
@@ -113,6 +113,7 @@ class DeckController extends Controller
     public function generate(Team $current_team, ServiceDeck $deck): RedirectResponse
     {
         $this->authorizeDeck($current_team, $deck);
+        Inertia::flash('deck', $deck->id);
 
         if ($deck->blocked) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Fix the entries marked as missing before generating.')]);
