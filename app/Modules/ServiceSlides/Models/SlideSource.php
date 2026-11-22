@@ -3,6 +3,7 @@
 namespace App\Modules\ServiceSlides\Models;
 
 use App\Models\Concerns\BelongsToTeam;
+use App\Models\Team;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
@@ -43,6 +44,27 @@ class SlideSource extends Model
             'slide_lines' => 'array',
             'file_updated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * An active item with this title and kind, ignoring one row when it is being edited or restored.
+     */
+    public static function activeDuplicate(Team $team, string $title, string $kind, ?int $exceptId = null): ?self
+    {
+        return static::query()
+            ->forTeam($team)
+            ->where('title', $title)
+            ->where('kind', $kind)
+            ->where('archived', false)
+            ->when($exceptId !== null, fn ($query) => $query->whereKeyNot($exceptId))
+            ->first();
+    }
+
+    public static function duplicateMessage(string $title, string $kind): string
+    {
+        $label = strtolower((string) (config('modules.slide_kinds')[$kind] ?? $kind));
+
+        return $title.' is already in this congregation\'s library as '.$label.'.';
     }
 
     /**

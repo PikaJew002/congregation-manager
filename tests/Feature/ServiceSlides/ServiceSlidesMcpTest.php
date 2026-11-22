@@ -124,6 +124,57 @@ class ServiceSlidesMcpTest extends TestCase
             ->assertHasErrors(['Upload an ODP or PPTX presentation.']);
     }
 
+    public function test_adon_olam_can_be_both_a_song_and_a_liturgy_item(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
+        $owner->withAccessToken($token->accessToken);
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'title' => 'Adon Olam',
+                'kind' => 'song',
+                'file' => base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'))),
+            ])
+            ->assertOk();
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'title' => 'Adon Olam',
+                'kind' => 'liturgy',
+                'file' => base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/adon-olam.pptx'))),
+            ])
+            ->assertOk()
+            ->assertSee('pptx');
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddLibraryItem::class, [
+                'title' => 'Adon Olam',
+                'kind' => 'song',
+                'file' => base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'))),
+            ])
+            ->assertHasErrors(['already in this congregation\'s library as song']);
+
+        $this->assertSame(2, SlideSource::query()->where('team_id', $team->id)->where('title', 'Adon Olam')->count());
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddAlias::class, ['title' => 'Adon Olam', 'alias' => 'Master of the World'])
+            ->assertHasErrors(['Pass its kind']);
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(AddAlias::class, ['title' => 'Adon Olam', 'kind' => 'liturgy', 'alias' => 'Master of the World'])
+            ->assertOk();
+
+        $liturgy = SlideSource::query()->where('team_id', $team->id)->where('title', 'Adon Olam')->where('kind', 'liturgy')->firstOrFail();
+        $song = SlideSource::query()->where('team_id', $team->id)->where('title', 'Adon Olam')->where('kind', 'song')->firstOrFail();
+
+        $this->assertTrue($liturgy->aliases()->where('alias', 'Master of the World')->exists());
+        $this->assertFalse($song->aliases()->where('alias', 'Master of the World')->exists());
+        $this->assertSame($song->id, app(ServicePlanner::class)->match($team, 'Adon Olam', 'odp', 'song')?->id);
+        $this->assertSame($liturgy->id, app(ServicePlanner::class)->match($team, 'Adon Olam', 'pptx', 'liturgy')?->id);
+    }
+
     public function test_a_powerpoint_liturgy_item_takes_its_title_but_no_author_from_the_first_slide(): void
     {
         Storage::fake('files');

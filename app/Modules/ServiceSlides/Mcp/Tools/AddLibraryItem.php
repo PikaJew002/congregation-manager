@@ -16,7 +16,7 @@ use Laravel\Mcp\Server\Tool;
 
 class AddLibraryItem extends Tool
 {
-    protected string $description = 'Add an ODP or PPTX file to this congregation\'s slide library. Songs must be ODP; liturgy must be PPTX. Send the file as base64, or send a Dropbox or Google Drive share/view/edit link (Drive file links from the Google Drive MCP are accepted). When title is omitted, line one of the first slide supplies it; for songs, line two supplies a missing author.';
+    protected string $description = 'Add an ODP or PPTX file to this congregation\'s slide library. Songs must be ODP; liturgy must be PPTX. The same title can be used for a different kind, such as a song and a liturgy item both named Adon Olam. A second active item of the same kind cannot reuse a title. Send the file as base64, or send a Dropbox or Google Drive share/view/edit link (Drive file links from the Google Drive MCP are accepted). When title is omitted, line one of the first slide supplies it; for songs, line two supplies a missing author.';
 
     public function __construct(
         private CongregationContext $context,
@@ -91,10 +91,8 @@ class AddLibraryItem extends Tool
                 return Response::error('The first slide has no title line.');
             }
 
-            $existing = SlideSource::query()->forTeam($team)->where('title', $title)->where('original_format', $format)->where('archived', false)->first();
-
-            if ($existing) {
-                return Response::error($title.' is already in this congregation\'s library as '.SlideFormats::LABELS[$format].'.');
+            if (SlideSource::activeDuplicate($team, $title, $data['kind'])) {
+                return Response::error(SlideSource::duplicateMessage($title, $data['kind']));
             }
 
             $source = $this->files->createSource($team, $upload, [

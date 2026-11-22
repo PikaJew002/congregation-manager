@@ -105,7 +105,7 @@ class ServicePlanner
                     continue;
                 }
 
-                $match = $this->match($deck->service->team, $title, $deck->template->format);
+                $match = $this->match($deck->service->team, $title, $deck->template->format, $slot['kind'] ?? null);
 
                 if ($match) {
                     $sources[] = $match;
@@ -215,8 +215,9 @@ class ServicePlanner
 
     /**
      * Only items in the given file format are considered, since a deck merges files of one format.
+     * When a kind is given, an exact title of that kind wins, then an exact title of any kind, then a close title.
      */
-    public function match(Team $team, string $title, ?string $format = null): ?SlideSource
+    public function match(Team $team, string $title, ?string $format = null, ?string $kind = null): ?SlideSource
     {
         $needle = Str::lower(trim($title));
         $sources = $this->library[$team->id] ??= SlideSource::query()->forTeam($team)->where('archived', false)->with('aliases')->get();
@@ -225,18 +226,43 @@ class ServicePlanner
             $sources = $sources->where('original_format', $format);
         }
 
-        $exact = $sources->first(fn (SlideSource $source) => Str::lower($source->title) === $needle)
-            ?? $sources->first(fn (SlideSource $source) => $source->aliases->contains(fn ($alias) => Str::lower($alias->alias) === $needle));
+        $preferred = $kind !== null && $kind !== '' ? $sources->where('kind', $kind) : null;
 
-        if ($exact) {
-            return $exact;
+        if ($preferred !== null && ($match = $this->exact($preferred, $needle))) {
+            return $match;
         }
 
+        if ($match = $this->exact($sources, $needle)) {
+            return $match;
+        }
+
+        if ($preferred !== null && ($match = $this->closest($preferred, $needle))) {
+            return $match;
+        }
+
+        return $this->closest($sources, $needle);
+    }
+
+    /**
+     * @param  Collection<int, SlideSource>  $sources
+     */
+    private function exact(Collection $sources, string $needle): ?SlideSource
+    {
+        return $sources->first(fn (SlideSource $source) => Str::lower($source->title) === $needle)
+            ?? $sources->first(fn (SlideSource $source) => $source->aliases->contains(fn ($alias) => Str::lower($alias->alias) === $needle));
+    }
+
+    /**
+     * @param  Collection<int, SlideSource>  $sources
+     */
+    private function closest(Collection $sources, string $needle): ?SlideSource
+    {
         $best = null;
         $bestScore = 0;
 
         foreach ($sources as $source) {
             similar_text($needle, Str::lower($source->title), $percent);
+
             if ($percent > $bestScore) {
                 $best = $source;
                 $bestScore = $percent;

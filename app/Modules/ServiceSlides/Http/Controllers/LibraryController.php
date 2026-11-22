@@ -45,6 +45,7 @@ class LibraryController extends Controller
     public function store(Request $request, Team $current_team, SlideFiles $files, SlideLinkDownloader $links, SlideFormats $formats): RedirectResponse
     {
         $data = $request->validate($this->metadataRules());
+        $this->rejectDuplicate($current_team, $data['title'], $data['kind']);
         $upload = $this->presentationUpload($request, $links, $formats, kind: $data['kind']);
 
         try {
@@ -62,6 +63,7 @@ class LibraryController extends Controller
     {
         $this->authorizeSource($current_team, $source);
         $data = $request->validate($this->metadataRules());
+        $this->rejectDuplicate($current_team, $data['title'], $data['kind'], $source->id);
 
         if ($mismatch = $formats->kindRequiresFormat($data['kind'], $source->original_format)) {
             throw ValidationException::withMessages(['kind' => $mismatch]);
@@ -107,6 +109,13 @@ class LibraryController extends Controller
     public function restore(Team $current_team, SlideSource $source, SlideFiles $files): RedirectResponse
     {
         $this->authorizeSource($current_team, $source);
+
+        if (SlideSource::activeDuplicate($current_team, $source->title, $source->kind, $source->id)) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => SlideSource::duplicateMessage($source->title, $source->kind)]);
+
+            return back();
+        }
+
         $files->setArchived($source, false);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __(':title restored.', ['title' => $source->title])]);
@@ -143,6 +152,15 @@ class LibraryController extends Controller
             'ccli' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];
+    }
+
+    private function rejectDuplicate(Team $team, string $title, string $kind, ?int $exceptId = null): void
+    {
+        if (SlideSource::activeDuplicate($team, $title, $kind, $exceptId)) {
+            throw ValidationException::withMessages([
+                'title' => SlideSource::duplicateMessage($title, $kind),
+            ]);
+        }
     }
 
     private function authorizeSource(Team $team, SlideSource $source): void

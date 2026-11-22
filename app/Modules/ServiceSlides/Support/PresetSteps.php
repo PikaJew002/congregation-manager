@@ -179,7 +179,7 @@ class PresetSteps
                 'kind' => filled($step['kind'] ?? null) ? $step['kind'] : null,
                 'repeat' => filter_var($step['repeat'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 'separator_slide_id' => $separator !== '' ? $this->slideId($template, $separator) : null,
-                'default_source_ids' => $this->defaultIds($template, array_values($step['defaults'] ?? [])),
+                'default_source_ids' => $this->defaultIds($template, array_values($step['defaults'] ?? []), filled($step['kind'] ?? null) ? (string) $step['kind'] : null),
             ];
         }
 
@@ -210,7 +210,7 @@ class PresetSteps
      * @param  list<string>  $titles
      * @return list<int>
      */
-    private function defaultIds(SlideTemplate $template, array $titles): array
+    private function defaultIds(SlideTemplate $template, array $titles, ?string $kind = null): array
     {
         $team = $template->team;
 
@@ -222,7 +222,7 @@ class PresetSteps
         $ids = [];
 
         foreach ($titles as $title) {
-            $source = $this->planner->match($team, $title, $template->format);
+            $source = $this->planner->match($team, $title, $template->format, $kind);
 
             if ($source === null) {
                 $unmatched[] = $title;

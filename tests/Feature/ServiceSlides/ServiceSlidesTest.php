@@ -81,6 +81,82 @@ class ServiceSlidesTest extends TestCase
         $this->assertStringStartsWith('Adon Olam', $source->fresh()->slide_lines[0]);
     }
 
+    public function test_the_same_title_can_be_a_song_and_a_liturgy_item(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), ['title' => 'Adon Olam', 'kind' => 'song', 'file' => $this->upload('kumi-ori.odp')])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), ['title' => 'Adon Olam', 'kind' => 'liturgy', 'file' => $this->upload('adon-olam.pptx')])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), ['title' => 'Adon Olam', 'kind' => 'song', 'file' => $this->upload('kumi-ori.odp')])
+            ->assertSessionHasErrors(['title' => 'Adon Olam is already in this congregation\'s library as song.']);
+
+        $this->assertSame(2, SlideSource::query()->where('team_id', $team->id)->where('title', 'Adon Olam')->count());
+
+        $song = SlideSource::query()->where('team_id', $team->id)->where('kind', 'song')->firstOrFail();
+        $this->actingAs($owner)
+            ->put(route('service-slides.library.update', [$team, $song]), [
+                'title' => 'Adon Olam',
+                'kind' => 'liturgy',
+            ])
+            ->assertSessionHasErrors(['title' => 'Adon Olam is already in this congregation\'s library as liturgy.']);
+
+        $this->actingAs($owner)
+            ->delete(route('service-slides.library.destroy', [$team, $song]))
+            ->assertSessionHasNoErrors();
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.store', $team), ['title' => 'Adon Olam', 'kind' => 'song', 'file' => $this->upload('kumi-ori.odp')])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($owner)
+            ->post(route('service-slides.library.restore', [$team, $song]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($song->fresh()->archived);
+    }
+
+    public function test_a_shared_title_matches_the_requested_kind_before_a_close_name(): void
+    {
+        [$team] = $this->owner();
+        SlideSource::query()->create([
+            'team_id' => $team->id,
+            'kind' => 'song',
+            'title' => 'Adon Olahm',
+            'original_format' => 'odp',
+            'original_path' => 'slides/fuzzy.odp',
+            'file_path' => 'slides/fuzzy.odp',
+            'slide_count' => 1,
+        ]);
+        $other = SlideSource::query()->create([
+            'team_id' => $team->id,
+            'kind' => 'other',
+            'title' => 'Adon Olam',
+            'original_format' => 'odp',
+            'original_path' => 'slides/other.odp',
+            'file_path' => 'slides/other.odp',
+            'slide_count' => 1,
+        ]);
+
+        $this->assertSame($other->id, app(ServicePlanner::class)->match($team, 'Adon Olam', 'odp', 'song')?->id);
+
+        $song = SlideSource::query()->create([
+            'team_id' => $team->id,
+            'kind' => 'song',
+            'title' => 'Adon Olam',
+            'original_format' => 'odp',
+            'original_path' => 'slides/song.odp',
+            'file_path' => 'slides/song.odp',
+            'slide_count' => 1,
+        ]);
+
+        $this->assertSame($song->id, app(ServicePlanner::class)->match($team, 'Adon Olam', 'odp', 'song')?->id);
+        $this->assertSame($other->id, app(ServicePlanner::class)->match($team, 'Adon Olam', 'odp', 'other')?->id);
+    }
+
     public function test_a_powerpoint_template_builds_a_powerpoint_deck_from_powerpoint_items_only(): void
     {
         Storage::fake('files');
