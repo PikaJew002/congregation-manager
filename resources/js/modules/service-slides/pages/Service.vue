@@ -178,6 +178,7 @@ const addDeck = () => {
 const generateAll = () => {
     router.visit(generate([teamSlug.value, props.service.id]), {
         preserveScroll: true,
+        preserveState: true,
     });
 };
 

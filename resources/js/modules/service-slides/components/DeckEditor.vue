@@ -251,6 +251,7 @@ const removeDeck = () => {
 const generateDeck = () => {
     router.visit(generate([props.teamSlug, props.deck.id]), {
         preserveScroll: true,
+        preserveState: true,
     });
 };
 

@@ -190,7 +190,7 @@ class ServiceController extends Controller
         }
         $zip->close();
 
-        return response()->download($zipPath, $service->service_date->toDateString().' slides.zip')->deleteFileAfterSend();
+        return response()->download($zipPath, $service->service_date->format('y-m-d').' slides.zip')->deleteFileAfterSend();
     }
 
     public function import(Request $request, Team $current_team, ServicePlanner $planner): RedirectResponse
