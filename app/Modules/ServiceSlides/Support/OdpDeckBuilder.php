@@ -58,6 +58,7 @@ class OdpDeckBuilder implements DeckBuilder
                 $masterHashes,
                 'i'.$index.'_',
                 $entry['slides'] ?? null,
+                $entry['label'] ?? basename($entry['path']),
             );
             $warnings = [...$warnings, ...$imported['warnings']];
             array_push($pages, ...$imported['pages']);
@@ -90,13 +91,14 @@ class OdpDeckBuilder implements DeckBuilder
         array &$masterHashes,
         string $prefix,
         ?array $onlySlides,
+        string $label,
     ): array {
         $warnings = [];
         $sourceFiles = $this->readZip($path);
         $sourceContent = $this->dom($sourceFiles['content.xml']);
         $sourceStyles = $this->dom($sourceFiles['styles.xml']);
         $sourceSize = $this->pageSize($sourceStyles);
-        $scale = $this->scale($templateSize, $sourceSize, $warnings, $path);
+        $scale = $this->scale($templateSize, $sourceSize, $warnings, $label);
 
         $selected = $this->selectedPages($sourceContent, $onlySlides);
         $masterContentHashes = $this->masterContentHashes($sourceStyles);
@@ -532,10 +534,10 @@ class OdpDeckBuilder implements DeckBuilder
      * @param  array{width: float, height: float}|null  $source
      * @param  list<string>  $warnings
      */
-    private function scale(?array $template, ?array $source, array &$warnings, string $path): ?float
+    private function scale(?array $template, ?array $source, array &$warnings, string $name): ?float
     {
         if (! $template || ! $source || $source['width'] == 0.0 || $source['height'] == 0.0) {
-            $warnings[] = 'Could not compare page size for '.basename($path).'.';
+            $warnings[] = 'Could not compare the slide size of '.$name.'.';
 
             return null;
         }

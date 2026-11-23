@@ -91,6 +91,33 @@ class PptxDeckBuilderTest extends TestCase
         $this->assertPackageIsConsistent($package);
     }
 
+    public function test_a_different_slide_size_names_the_library_item_and_both_sizes(): void
+    {
+        $package = PptxPackage::open($this->fixture('barchu.pptx'));
+        $part = $package->presentationPart();
+        $package->files[$part] = str_replace(
+            '<p:sldSz cx="12192000" cy="6858000"/>',
+            '<p:sldSz cx="9144000" cy="6858000"/>',
+            $package->files[$part],
+        );
+        $narrow = storage_path('framework/testing/barchu-4x3.pptx');
+        $package->save($narrow);
+
+        $destination = storage_path('framework/testing/merged-size.pptx');
+        $warnings = (new PptxDeckBuilder)->build(
+            $this->fixture('liturgy-service.pptx'),
+            [
+                ['type' => 'source', 'path' => $narrow, 'label' => 'Barchu'],
+                ['type' => 'source', 'path' => $narrow, 'label' => 'Shema'],
+            ],
+            $destination,
+        );
+
+        $this->assertSame([
+            'Barchu and Shema are 25.4cm x 19.05cm, and the template is 33.867cm x 19.05cm, so their slides may not fit.',
+        ], $warnings);
+    }
+
     public function test_missing_template_slides_are_reported(): void
     {
         $destination = storage_path('framework/testing/merged-missing.pptx');

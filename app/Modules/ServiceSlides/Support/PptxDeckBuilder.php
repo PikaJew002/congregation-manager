@@ -53,7 +53,7 @@ class PptxDeckBuilder implements DeckBuilder
     private array $sourceLayouts = [];
 
     /**
-     * @param  list<array{type: string, index?: int, path?: string, slides?: list<int>}>  $entries
+     * @param  list<array{type: string, index?: int, path?: string, label?: string, slides?: list<int>}>  $entries
      * @return list<string>
      */
     public function build(string $templatePath, array $entries, string $destination): array
@@ -61,8 +61,9 @@ class PptxDeckBuilder implements DeckBuilder
         $template = PptxPackage::open($templatePath);
         $this->start($templatePath, $template);
         $templateSlides = $template->slideParts();
-        $templateSize = $template->slideSize();
+        $templateSize = PptxInspector::formatSize($template->slideSize());
         $warnings = [];
+        $sizeMismatches = [];
 
         foreach ($entries as $entry) {
             if ($entry['type'] === 'template_slide') {
@@ -84,8 +85,9 @@ class PptxDeckBuilder implements DeckBuilder
             }
 
             $source = PptxPackage::open($entry['path']);
-            if ($source->slideSize() != $templateSize) {
-                $warnings[] = basename($entry['path']).' has a different slide size from the template, so its slides may not fit.';
+            $sourceSize = PptxInspector::formatSize($source->slideSize());
+            if ($sourceSize !== $templateSize) {
+                $sizeMismatches[$sourceSize ?? ''][] = $entry['label'] ?? basename($entry['path']);
             }
 
             foreach ($this->selectedSlides($source, $entry['slides'] ?? null) as $slide) {
@@ -96,7 +98,47 @@ class PptxDeckBuilder implements DeckBuilder
         $this->finish();
         $this->out->save($destination);
 
+        return [...$warnings, ...$this->sizeWarnings($sizeMismatches, $templateSize)];
+    }
+
+    /**
+     * @param  array<string, list<string>>  $mismatches
+     * @return list<string>
+     */
+    private function sizeWarnings(array $mismatches, ?string $templateSize): array
+    {
+        $warnings = [];
+
+        foreach ($mismatches as $sourceSize => $names) {
+            $list = $this->nameList($names);
+            $plural = count($names) > 1;
+            $verb = $plural ? 'are' : 'is';
+            $whose = $plural ? 'their' : 'its';
+
+            if ($sourceSize !== '' && $templateSize !== null) {
+                $warnings[] = "{$list} {$verb} {$sourceSize}, and the template is {$templateSize}, so {$whose} slides may not fit.";
+
+                continue;
+            }
+
+            $warnings[] = "{$list} ".($plural ? 'have' : 'has')." a different slide size from the template, so {$whose} slides may not fit.";
+        }
+
         return $warnings;
+    }
+
+    /**
+     * @param  list<string>  $names
+     */
+    private function nameList(array $names): string
+    {
+        if (count($names) < 2) {
+            return $names[0] ?? '';
+        }
+
+        $last = array_pop($names);
+
+        return implode(', ', $names).(count($names) === 1 ? '' : ',').' and '.$last;
     }
 
     private function start(string $templatePath, PptxPackage $template): void

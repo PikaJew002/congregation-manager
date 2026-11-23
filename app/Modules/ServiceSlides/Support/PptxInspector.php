@@ -47,13 +47,24 @@ class PptxInspector implements SlideInspector
 
     public function pageSize(string $path): ?string
     {
-        $size = PptxPackage::open($path)->slideSize();
+        return self::formatSize(PptxPackage::open($path)->slideSize());
+    }
 
+    /**
+     * @param  array{cx: int, cy: int}|null  $size
+     */
+    public static function formatSize(?array $size): ?string
+    {
         if ($size === null || $size['cx'] === 0 || $size['cy'] === 0) {
             return null;
         }
 
-        return round($size['cx'] / 360000, 3).'cm x '.round($size['cy'] / 360000, 3).'cm';
+        return self::centimeters($size['cx']).'cm x '.self::centimeters($size['cy']).'cm';
+    }
+
+    private static function centimeters(int $emu): string
+    {
+        return rtrim(rtrim(number_format($emu / 360000, 3, '.', ''), '0'), '.');
     }
 
     /**
