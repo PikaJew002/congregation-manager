@@ -91,30 +91,39 @@ class PptxDeckBuilderTest extends TestCase
         $this->assertPackageIsConsistent($package);
     }
 
-    public function test_a_different_slide_size_names_the_library_item_and_both_sizes(): void
+    public function test_smaller_or_trivially_larger_slides_fit_without_a_warning(): void
     {
-        $package = PptxPackage::open($this->fixture('barchu.pptx'));
-        $part = $package->presentationPart();
-        $package->files[$part] = str_replace(
-            '<p:sldSz cx="12192000" cy="6858000"/>',
-            '<p:sldSz cx="9144000" cy="6858000"/>',
-            $package->files[$part],
-        );
-        $narrow = storage_path('framework/testing/barchu-4x3.pptx');
-        $package->save($narrow);
-
+        $narrow = $this->resized('barchu.pptx', '12192000', '9144000');
+        $barelyWider = $this->resized('barchu.pptx', '12192000', '12195000');
         $destination = storage_path('framework/testing/merged-size.pptx');
+
         $warnings = (new PptxDeckBuilder)->build(
             $this->fixture('liturgy-service.pptx'),
             [
                 ['type' => 'source', 'path' => $narrow, 'label' => 'Barchu'],
-                ['type' => 'source', 'path' => $narrow, 'label' => 'Shema'],
+                ['type' => 'source', 'path' => $barelyWider, 'label' => 'Shema'],
+            ],
+            $destination,
+        );
+
+        $this->assertSame([], $warnings);
+    }
+
+    public function test_a_larger_slide_size_names_the_library_item_and_both_sizes(): void
+    {
+        $wide = $this->resized('barchu.pptx', '12192000', '13716000');
+        $destination = storage_path('framework/testing/merged-overflow.pptx');
+        $warnings = (new PptxDeckBuilder)->build(
+            $this->fixture('liturgy-service.pptx'),
+            [
+                ['type' => 'source', 'path' => $wide, 'label' => 'Barchu'],
+                ['type' => 'source', 'path' => $wide, 'label' => 'Shema'],
             ],
             $destination,
         );
 
         $this->assertSame([
-            'Barchu and Shema are 25.4cm x 19.05cm, and the template is 33.867cm x 19.05cm, so their slides may not fit.',
+            'Barchu and Shema are 38.1cm x 19.05cm, and the template is 33.867cm x 19.05cm, so their slides may not fit.',
         ], $warnings);
     }
 
@@ -134,6 +143,21 @@ class PptxDeckBuilderTest extends TestCase
     private function fixture(string $name): string
     {
         return base_path('tests/Fixtures/slides/'.$name);
+    }
+
+    private function resized(string $name, string $fromWidth, string $toWidth): string
+    {
+        $package = PptxPackage::open($this->fixture($name));
+        $part = $package->presentationPart();
+        $package->files[$part] = str_replace(
+            '<p:sldSz cx="'.$fromWidth.'" cy="6858000"/>',
+            '<p:sldSz cx="'.$toWidth.'" cy="6858000"/>',
+            $package->files[$part],
+        );
+        $path = storage_path('framework/testing/'.$toWidth.'-'.$name);
+        $package->save($path);
+
+        return $path;
     }
 
     private function masterOf(PptxPackage $package, string $slide): ?string
