@@ -22,6 +22,7 @@ use App\Modules\ServiceSlides\Support\PptxInspector;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use ReflectionMethod;
 use Tests\TestCase;
 
 class ServiceSlidesMcpTest extends TestCase
@@ -593,6 +594,73 @@ class ServiceSlidesMcpTest extends TestCase
 
         $this->assertSame($before, $entries());
         $this->assertSame(['template_slide', 'slot', 'template_slide'], array_column($template->fresh()->preset, 'type'));
+    }
+
+    public function test_search_library_returns_the_next_page_from_its_cursor(): void
+    {
+        [$team, $owner] = $this->agent();
+
+        SlideSource::query()->create([
+            'team_id' => $team->id,
+            'kind' => 'song',
+            'title' => 'Item 00',
+            'original_path' => 'slides/item.odp',
+            'file_path' => 'slides/item.odp',
+            'slide_count' => 1,
+            'archived' => true,
+        ]);
+
+        foreach (range(1, 26) as $number) {
+            SlideSource::query()->create([
+                'team_id' => $team->id,
+                'kind' => 'song',
+                'title' => sprintf('Item %02d', $number),
+                'original_path' => 'slides/item.odp',
+                'file_path' => 'slides/item.odp',
+                'slide_count' => 1,
+            ]);
+        }
+
+        $first = $this->libraryPage($owner, ['query' => 'Item', 'kind' => 'song']);
+
+        $this->assertCount(25, $first['items']);
+        $this->assertSame('Item 01', $first['items'][0]['title']);
+        $this->assertSame('Item 25', $first['items'][24]['title']);
+        $this->assertArrayHasKey('nextCursor', $first);
+
+        $second = $this->libraryPage($owner, [
+            'query' => 'Item',
+            'kind' => 'song',
+            'cursor' => $first['nextCursor'],
+        ]);
+
+        $this->assertSame(['Item 26'], array_column($second['items'], 'title'));
+        $this->assertArrayNotHasKey('nextCursor', $second);
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(SearchLibrary::class, ['query' => 'Other', 'cursor' => $first['nextCursor']])
+            ->assertHasErrors(['That cursor is not valid for this search.']);
+
+        ServiceSlidesServer::actingAs($owner)
+            ->tool(SearchLibrary::class, ['query' => 'Item', 'cursor' => 'not-a-cursor'])
+            ->assertHasErrors(['That cursor is not valid for this search.']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function libraryPage(User $owner, array $arguments): array
+    {
+        $response = ServiceSlidesServer::actingAs($owner)
+            ->tool(SearchLibrary::class, $arguments)
+            ->assertOk();
+
+        $content = (new ReflectionMethod($response, 'content'))->invoke($response);
+        $page = json_decode($content[0], true);
+        $this->assertIsArray($page);
+
+        return $page;
     }
 
     /**
