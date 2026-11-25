@@ -199,7 +199,7 @@ class MediaWorker
                 'CacheControl' => 'public, max-age=60',
             ]);
 
-            $recording->update(['hls_path' => $path, 'status' => 'uploaded', 'media_step' => 'manifest']);
+            $recording->update(['hls_path' => $path, 'status' => 'uploaded', 'media_step' => 'manifest', 'failed_step' => null, 'error' => null]);
             $recording->note('Uploaded HLS and source MP4.');
             (new UpdateManifest($recording->id))->handle();
             $recording->update(['media_step' => null]);

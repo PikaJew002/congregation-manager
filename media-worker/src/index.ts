@@ -130,8 +130,17 @@ class MediaContainer extends Container<Env> {
         };
     }
 
-    /** True while this instance has a run in memory. A reset loses the run and this flag together. */
-    private active = false;
+    /**
+     * Runs this instance has in memory. A count, not a flag: the next step is
+     * accepted while the previous run is still reporting to Laravel, so two
+     * runs overlap briefly and the first to finish must not mark the other
+     * as gone. A reset loses the runs and this count together.
+     */
+    private activeRuns = 0;
+
+    private get active(): boolean {
+        return this.activeRuns > 0;
+    }
 
     /** Called by the Worker. Returns at once; the step keeps running here. */
     async accept(job: Job): Promise<Response> {
@@ -222,10 +231,10 @@ class MediaContainer extends Container<Env> {
     }
 
     private launch(job: Job): void {
-        this.active = true;
+        this.activeRuns++;
         this.ctx.waitUntil(
             this.run(job).finally(() => {
-                this.active = false;
+                this.activeRuns--;
             }),
         );
     }
@@ -258,7 +267,10 @@ class MediaContainer extends Container<Env> {
             } catch {
                 result = {
                     ok: false,
-                    error: `Container answered ${response.status}: ${last.slice(0, 500)}`,
+                    error:
+                        last === ''
+                            ? 'The container connection closed before the step finished.'
+                            : `Container answered ${response.status}: ${last.slice(0, 500)}`,
                 };
             }
         } catch (error) {

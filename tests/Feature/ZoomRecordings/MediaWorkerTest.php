@@ -125,6 +125,19 @@ class MediaWorkerTest extends TestCase
         Storage::disk('r2-public')->assertExists('recordings/recordings.json');
     }
 
+    public function test_retrying_the_manifest_clears_the_earlier_error(): void
+    {
+        Storage::fake('r2-public');
+        $recording = $this->recording(['status' => 'failed', 'failed_step' => 'manifest', 'error' => 'R2 timed out', 'source_path' => 'x', 'source_height' => 720]);
+
+        app(DispatchRecordingPipeline::class)->handle($recording, 'manifest');
+
+        $recording->refresh();
+        $this->assertSame('completed', $recording->status);
+        $this->assertNull($recording->error);
+        $this->assertNull($recording->failed_step);
+    }
+
     public function test_a_failed_step_is_marked_for_retry_and_retry_resends_it(): void
     {
         [$team, $owner] = $this->owner();
