@@ -53,6 +53,9 @@ export default defineConfig({
             'resources/js/components/ui/*',
             'resources/js/routes/**',
             'resources/js/wayfinder/**',
+            // Separate Cloudflare Worker package with its own dependencies
+            // and typecheck (npm run typecheck in media-worker/).
+            'media-worker/**',
         ],
         options: {
             denyWarnings: true,
