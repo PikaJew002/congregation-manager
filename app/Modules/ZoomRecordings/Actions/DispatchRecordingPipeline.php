@@ -10,8 +10,16 @@ use Illuminate\Support\Facades\Bus;
 
 class DispatchRecordingPipeline
 {
+    public function __construct(private MediaWorker $mediaWorker) {}
+
     public function handle(ZoomRecording $recording, ?string $fromStep = null): void
     {
+        if (MediaWorker::enabled()) {
+            $this->mediaWorker->start($recording, $fromStep);
+
+            return;
+        }
+
         $jobs = [
             'download' => new DownloadRecording($recording->id),
             'transcode' => new TranscodeAndUpload($recording->id),

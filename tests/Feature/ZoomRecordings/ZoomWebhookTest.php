@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Modules\ZoomRecordings\Jobs\DownloadRecording;
 use App\Modules\ZoomRecordings\Jobs\TranscodeAndUpload;
 use App\Modules\ZoomRecordings\Jobs\UpdateManifest;
+use App\Modules\ZoomRecordings\Models\ZoomRecording;
 use App\Modules\ZoomRecordings\Models\ZoomRecordingSetting;
 use App\Support\Modules\ModuleAccess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -89,11 +90,47 @@ class ZoomWebhookTest extends TestCase
         $this->signed($team, $payload)->assertOk();
 
         $this->assertDatabaseCount('zoom_recordings', 1);
+        $recording = ZoomRecording::query()->firstOrFail();
+        $this->assertSame('https://zoom.example/download', $recording->download_url);
+        $this->assertSame('token', $recording->download_token);
         Bus::assertChained([
             DownloadRecording::class,
             TranscodeAndUpload::class,
             UpdateManifest::class,
         ]);
+    }
+
+    public function test_a_second_event_refreshes_the_download_link_before_the_file_is_stored(): void
+    {
+        Bus::fake();
+        $team = $this->team();
+        ZoomRecordingSetting::forTeam($team)->update(['webhook_secret' => 'top-secret']);
+        $payload = [
+            'event' => 'recording.completed',
+            'download_token' => 'first-token',
+            'payload' => [
+                'object' => [
+                    'uuid' => 'meeting-1',
+                    'topic' => 'Shabbat',
+                    'recording_files' => [[
+                        'id' => 'file-1',
+                        'file_type' => 'MP4',
+                        'recording_type' => 'shared_screen_with_speaker_view',
+                        'download_url' => 'https://zoom.example/first',
+                    ]],
+                ],
+            ],
+        ];
+
+        $this->signed($team, $payload)->assertOk();
+        $payload['download_token'] = 'second-token';
+        $payload['payload']['object']['recording_files'][0]['download_url'] = 'https://zoom.example/second';
+        $this->signed($team, $payload)->assertOk();
+
+        $recording = ZoomRecording::query()->firstOrFail();
+        $this->assertSame('https://zoom.example/second', $recording->download_url);
+        $this->assertSame('second-token', $recording->download_token);
+        Bus::assertDispatchedTimes(DownloadRecording::class, 1);
     }
 
     public function test_a_disabled_module_hides_the_webhook(): void

@@ -11,6 +11,12 @@ use DOMElement;
  */
 class PptxDeckBuilder implements DeckBuilder
 {
+    /**
+     * Export tools round the same widescreen size by a fraction of a millimeter.
+     * A slide that is smaller than the template fits; only a larger slide can overflow.
+     */
+    private const OVERFLOW_TOLERANCE_EMU = 36_000;
+
     private const RELATIONSHIP_TYPES = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
 
     private const P14 = 'http://schemas.microsoft.com/office/powerpoint/2010/main';
@@ -61,7 +67,8 @@ class PptxDeckBuilder implements DeckBuilder
         $template = PptxPackage::open($templatePath);
         $this->start($templatePath, $template);
         $templateSlides = $template->slideParts();
-        $templateSize = PptxInspector::formatSize($template->slideSize());
+        $templateRawSize = $template->slideSize();
+        $templateSize = PptxInspector::formatSize($templateRawSize);
         $warnings = [];
         $sizeMismatches = [];
 
@@ -85,9 +92,9 @@ class PptxDeckBuilder implements DeckBuilder
             }
 
             $source = PptxPackage::open($entry['path']);
-            $sourceSize = PptxInspector::formatSize($source->slideSize());
-            if ($sourceSize !== $templateSize) {
-                $sizeMismatches[$sourceSize ?? ''][] = $entry['label'] ?? basename($entry['path']);
+            $sourceRawSize = $source->slideSize();
+            if ($this->overflows($sourceRawSize, $templateRawSize)) {
+                $sizeMismatches[PptxInspector::formatSize($sourceRawSize) ?? ''][] = $entry['label'] ?? basename($entry['path']);
             }
 
             foreach ($this->selectedSlides($source, $entry['slides'] ?? null) as $slide) {
@@ -125,6 +132,20 @@ class PptxDeckBuilder implements DeckBuilder
         }
 
         return $warnings;
+    }
+
+    /**
+     * @param  array{cx: int, cy: int}|null  $source
+     * @param  array{cx: int, cy: int}|null  $template
+     */
+    private function overflows(?array $source, ?array $template): bool
+    {
+        if ($source === null || $template === null) {
+            return false;
+        }
+
+        return $source['cx'] > $template['cx'] + self::OVERFLOW_TOLERANCE_EMU
+            || $source['cy'] > $template['cy'] + self::OVERFLOW_TOLERANCE_EMU;
     }
 
     /**

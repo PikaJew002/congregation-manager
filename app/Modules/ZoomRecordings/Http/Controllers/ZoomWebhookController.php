@@ -40,8 +40,10 @@ class ZoomWebhookController extends Controller
 
         $object = data_get($payload, 'payload.object', []);
         $file = $this->preferredFile($object, $settings->preferred_recording_type);
+        $downloadUrl = $file['download_url'] ?? null;
+        $downloadToken = data_get($payload, 'download_token') ?? data_get($payload, 'payload.download_token');
 
-        if (! $file || empty($object['uuid'])) {
+        if (! $file || empty($object['uuid']) || blank($downloadUrl) || blank($downloadToken)) {
             return response('no recording file', 200);
         }
 
@@ -52,12 +54,20 @@ class ZoomWebhookController extends Controller
                 'title' => $object['topic'] ?? 'Recording',
                 'recorded_at' => $object['start_time'] ?? null,
                 'duration_minutes' => $object['duration'] ?? null,
-                'download_url' => $file['download_url'] ?? null,
-                'download_token' => data_get($payload, 'download_token') ?? data_get($payload, 'payload.download_token'),
+                'download_url' => $downloadUrl,
+                'download_token' => $downloadToken,
                 'recording_file_id' => $file['id'] ?? null,
                 'status' => 'received',
             ],
         );
+
+        if (! $recording->wasRecentlyCreated && blank($recording->source_path)) {
+            $recording->update([
+                'download_url' => $downloadUrl,
+                'download_token' => $downloadToken,
+                'recording_file_id' => $file['id'] ?? null,
+            ]);
+        }
 
         if ($recording->wasRecentlyCreated) {
             $pipeline->handle($recording);

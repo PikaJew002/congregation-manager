@@ -45,6 +45,10 @@ const statusLabels: Record<RecordingStatus, string> = {
 const stepLabels: Record<RecordingStep, string> = {
     download: 'download from Zoom',
     transcode: 'transcode and upload',
+    'rendition:480p': 'encode the 480p video',
+    'rendition:720p': 'encode the 720p video',
+    'rendition:1080p': 'encode the 1080p video',
+    poster: 'grab the poster image',
     manifest: 'update the website list',
 };
 
