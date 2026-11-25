@@ -2,7 +2,8 @@
 
 namespace App\Modules\ServiceSlides\Mcp\Tools;
 
-use App\Modules\ServiceSlides\Mcp\CongregationContext;
+use App\Mcp\CongregationContext;
+use App\Mcp\ModuleTool;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Validation\Rule;
@@ -12,6 +13,8 @@ use Laravel\Mcp\Server\Tool;
 
 class AddAlias extends Tool
 {
+    use ModuleTool;
+
     protected string $description = 'Add an alternate title for a library item. When more than one item shares the title, pass kind.';
 
     public function __construct(private CongregationContext $context) {}
@@ -25,9 +28,14 @@ class AddAlias extends Tool
         ];
     }
 
+    protected function module(): string
+    {
+        return 'service-slides';
+    }
+
     public function handle(Request $request): Response
     {
-        $team = $this->context->resolve($request);
+        $team = $this->context->resolve($request, 'service-slides');
         if ($team instanceof Response) {
             return $team;
         }

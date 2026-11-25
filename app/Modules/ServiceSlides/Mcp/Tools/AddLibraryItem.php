@@ -2,8 +2,9 @@
 
 namespace App\Modules\ServiceSlides\Mcp\Tools;
 
+use App\Mcp\CongregationContext;
+use App\Mcp\ModuleTool;
 use App\Modules\ServiceSlides\Actions\SlideFiles;
-use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Support\EncodedUpload;
 use App\Modules\ServiceSlides\Support\SlideFormats;
@@ -16,6 +17,8 @@ use Laravel\Mcp\Server\Tool;
 
 class AddLibraryItem extends Tool
 {
+    use ModuleTool;
+
     protected string $description = 'Add an ODP or PPTX file to this congregation\'s slide library. Songs must be ODP; liturgy must be PPTX. The same title can be used for a different kind, such as a song and a liturgy item both named Adon Olam. A second active item of the same kind cannot reuse a title. Send the file as base64, or send a Dropbox or Google Drive share/view/edit link (Drive file links from the Google Drive MCP are accepted). When title is omitted, line one of the first slide supplies it; for songs, line two supplies a missing author.';
 
     public function __construct(
@@ -40,9 +43,14 @@ class AddLibraryItem extends Tool
         ];
     }
 
+    protected function module(): string
+    {
+        return 'service-slides';
+    }
+
     public function handle(Request $request): Response
     {
-        $team = $this->context->resolve($request);
+        $team = $this->context->resolve($request, 'service-slides');
         if ($team instanceof Response) {
             return $team;
         }

@@ -45,6 +45,4 @@ Route::get('decks/{deck}/download', [DeckController::class, 'download'])->name('
 Route::get('history', HistoryController::class)->name('history');
 
 Route::get('settings', [AccessController::class, 'index'])->name('settings');
-Route::post('tokens', [AccessController::class, 'store'])->name('tokens.store');
-Route::delete('tokens/{token}', [AccessController::class, 'destroy'])->name('tokens.destroy');
 Route::delete('connections/{connection}', [AccessController::class, 'destroyConnection'])->name('connections.destroy');

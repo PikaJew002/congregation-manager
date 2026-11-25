@@ -28,7 +28,7 @@ class UpdateManifest implements ShouldQueue
         $base = rtrim((string) $settings->public_base_url, '/');
         $items = collect($existing['recordings'] ?? [])->reject(fn ($item) => ($item['id'] ?? null) === $recording->id)->values();
 
-        if (! $recording->hidden) {
+        if (! $recording->isArchived()) {
             $items->prepend([
                 'id' => $recording->id,
                 'title' => $recording->title,

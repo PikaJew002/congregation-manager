@@ -32,7 +32,7 @@ class ServiceSlidesPagesTest extends TestCase
             'Services' => [route('service-slides.services', $team->slug), 'services'],
             'Service' => [route('service-slides.services.show', [$team->slug, $result['service']]), 'service'],
             'History' => [route('service-slides.history', $team->slug), 'items'],
-            'Settings' => [route('service-slides.settings', $team->slug), 'tokens'],
+            'Settings' => [route('service-slides.settings', $team->slug), 'connections'],
         ];
 
         foreach ($pages as $component => [$url, $prop]) {

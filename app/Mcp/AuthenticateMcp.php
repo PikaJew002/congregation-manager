@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\ServiceSlides\Http\Middleware;
+namespace App\Mcp;
 
 use Closure;
 use Illuminate\Http\Request;
@@ -8,6 +8,11 @@ use Illuminate\Support\Facades\Auth;
 use Laravel\Passport\Passport;
 use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * Signs in an MCP request with an OAuth access token (from Claude, Cursor or
+ * another client that went through the approval screen) and records which
+ * congregation the token was approved for.
+ */
 class AuthenticateMcp
 {
     /**
@@ -19,14 +24,8 @@ class AuthenticateMcp
 
         if (is_string($bearer) && substr_count($bearer, '.') === 2 && Auth::guard('api')->check()) {
             Auth::shouldUse('api');
-            $request->attributes->set('service_slides.oauth', true);
-            $request->attributes->set('service_slides.oauth_team_id', $this->teamId($bearer));
-
-            return $next($request);
-        }
-
-        if (is_string($bearer) && ! str_contains($bearer, '.') && Auth::guard('sanctum')->check()) {
-            Auth::shouldUse('sanctum');
+            $request->attributes->set('mcp.oauth', true);
+            $request->attributes->set('mcp.oauth_team_id', $this->teamId($bearer));
 
             return $next($request);
         }

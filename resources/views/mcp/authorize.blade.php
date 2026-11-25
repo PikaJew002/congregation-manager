@@ -18,7 +18,7 @@
         <div class="space-y-2 p-6 text-center">
             <h1 class="text-2xl font-semibold tracking-tight">Authorize {{ $client->name }}</h1>
             <p class="text-sm text-muted-foreground">
-                This app will be able to plan service slides for the congregation you choose.
+                This app will be able to use Congregation Manager tools, such as service slides and recordings, for the congregation you choose.
             </p>
         </div>
 
@@ -50,7 +50,7 @@
 
             @if ($teams->isEmpty())
                 <p class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    This account cannot plan slides for any congregation.
+                    This account cannot use these tools for any congregation.
                 </p>
             @else
                 <div class="space-y-2 text-left">

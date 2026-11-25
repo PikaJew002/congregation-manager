@@ -31,7 +31,7 @@ class ZoomRecording extends Model
         'source_height',
         'media_step',
         'hls_path',
-        'hidden',
+        'archived_at',
         'log',
     ];
 
@@ -46,7 +46,7 @@ class ZoomRecording extends Model
         return [
             'recorded_at' => 'datetime',
             'download_token' => 'encrypted',
-            'hidden' => 'boolean',
+            'archived_at' => 'datetime',
             'log' => 'array',
             'hebcal' => 'array',
         ];
@@ -57,6 +57,12 @@ class ZoomRecording extends Model
         $log = $this->log ?? [];
         $log[] = ['at' => now()->toIso8601String(), 'message' => $message];
         $this->update(['log' => $log]);
+    }
+
+    /** Archived recordings keep their files but are left out of the public feed. */
+    public function isArchived(): bool
+    {
+        return $this->archived_at !== null;
     }
 
     public const DEFAULT_SERVICE = 'Shabbat Morning Service';

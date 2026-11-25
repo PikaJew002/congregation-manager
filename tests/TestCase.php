@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Models\Team;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Laravel\Fortify\Features;
 use Laravel\Passport\Passport;
@@ -44,6 +45,17 @@ abstract class TestCase extends BaseTestCase
         ]);
 
         Passport::$validateKeyPermissions = false;
+    }
+
+    /**
+     * Stand in for AuthenticateMcp after an OAuth approval: the request is an
+     * OAuth connection approved for this congregation. Use with
+     * CongregationServer::actingAs($user).
+     */
+    protected function approveMcp(Team $team): void
+    {
+        request()->attributes->set('mcp.oauth', true);
+        request()->attributes->set('mcp.oauth_team_id', $team->id);
     }
 
     protected function skipUnlessFortifyHas(string $feature, ?string $message = null): void

@@ -2,8 +2,9 @@
 
 namespace App\Modules\ServiceSlides\Mcp\Tools;
 
+use App\Mcp\CongregationContext;
+use App\Mcp\ModuleTool;
 use App\Modules\ServiceSlides\Actions\ServicePlanner;
-use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use App\Modules\ServiceSlides\Support\PresetSteps;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Validation\ValidationException;
@@ -14,6 +15,8 @@ use Laravel\Mcp\Server\Tool;
 
 class SetPreset extends Tool
 {
+    use ModuleTool;
+
     protected string $description = 'Replace a template\'s preset with an ordered list of steps. Copy the current steps from list-templates and insert the new slot; slots you omit are removed. A slide step names a template slide by label. A slot step has key, label, kind, and repeat (liturgy slots are false; the music songs slot is true), plus an optional separator slide label and default library titles. An unknown or ambiguous slide label is rejected and the slides are listed. A default title that is not in the library, in this template\'s format, is rejected and the preset is left unchanged. A saved preset applies to decks created afterward. Existing decks keep their entries.';
 
     public function __construct(
@@ -38,9 +41,14 @@ class SetPreset extends Tool
         ];
     }
 
+    protected function module(): string
+    {
+        return 'service-slides';
+    }
+
     public function handle(Request $request): Response
     {
-        $team = $this->context->resolve($request);
+        $team = $this->context->resolve($request, 'service-slides');
         if ($team instanceof Response) {
             return $team;
         }

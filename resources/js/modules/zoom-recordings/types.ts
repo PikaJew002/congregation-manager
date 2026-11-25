@@ -32,7 +32,7 @@ export type ZoomRecording = {
     failed_step: RecordingStep | null;
     error: string | null;
     hls_path: string | null;
-    hidden: boolean;
+    archived_at: string | null;
     log: Array<{ at: string; message: string }> | null;
     created_at: string;
 };

@@ -4,8 +4,9 @@ namespace App\Modules\ZoomRecordings\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Team;
+use App\Modules\ZoomRecordings\Actions\DeleteRecording;
 use App\Modules\ZoomRecordings\Actions\DispatchRecordingPipeline;
-use App\Modules\ZoomRecordings\Jobs\UpdateManifest;
+use App\Modules\ZoomRecordings\Actions\UpdateRecording;
 use App\Modules\ZoomRecordings\Models\ZoomRecording;
 use App\Modules\ZoomRecordings\Models\ZoomRecordingSetting;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +26,7 @@ class ZoomRecordingController extends Controller
         ]);
     }
 
-    public function update(Request $request, Team $current_team, ZoomRecording $recording): RedirectResponse
+    public function update(Request $request, Team $current_team, ZoomRecording $recording, UpdateRecording $updater): RedirectResponse
     {
         abort_unless($recording->team_id === $current_team->id, 404);
         $data = $request->validate([
@@ -33,15 +34,29 @@ class ZoomRecordingController extends Controller
             'service' => ['nullable', 'string', 'max:255'],
             'speaker' => ['nullable', 'string', 'max:255'],
             'torah_portion' => ['nullable', 'string', 'max:255'],
-            'hidden' => ['required', 'boolean'],
+            'archived' => ['required', 'boolean'],
         ]);
-        $recording->update($data);
-
-        if (filled($recording->hls_path)) {
-            UpdateManifest::dispatchSync($recording->id);
-        }
+        $data['archived'] = (bool) $data['archived'];
+        $updater->handle($recording, $data);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Recording updated.')]);
+
+        return back();
+    }
+
+    public function destroy(Team $current_team, ZoomRecording $recording, DeleteRecording $delete): RedirectResponse
+    {
+        abort_unless($recording->team_id === $current_team->id, 404);
+
+        if (! DeleteRecording::canDelete($recording)) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('This recording is still processing. Delete it once it has finished or failed.')]);
+
+            return back();
+        }
+
+        $delete->handle($recording);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Recording deleted.')]);
 
         return back();
     }

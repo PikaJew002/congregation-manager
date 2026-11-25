@@ -93,7 +93,7 @@ class ZoomRecordingPagesTest extends TestCase
         $recording = $this->recording($team, ['status' => 'transcoding']);
 
         $this->actingAs($owner)
-            ->patch(route('zoom-recordings.update', [$team->slug, $recording]), ['title' => 'Sunday', 'hidden' => false])
+            ->patch(route('zoom-recordings.update', [$team->slug, $recording]), ['title' => 'Sunday', 'archived' => false])
             ->assertRedirect();
 
         $this->assertSame('Sunday', $recording->fresh()->title);
@@ -108,7 +108,7 @@ class ZoomRecordingPagesTest extends TestCase
         $recording = $this->recording($team, ['status' => 'completed', 'hls_path' => 'recordings/1/playlist.m3u8']);
 
         $this->actingAs($owner)
-            ->patch(route('zoom-recordings.update', [$team->slug, $recording]), ['title' => 'Sunday', 'hidden' => false])
+            ->patch(route('zoom-recordings.update', [$team->slug, $recording]), ['title' => 'Sunday', 'archived' => false])
             ->assertRedirect();
 
         $this->assertSame('completed', $recording->fresh()->status);

@@ -3,10 +3,10 @@
 namespace Tests\Feature\ServiceSlides;
 
 use App\Enums\TeamRole;
+use App\Mcp\CongregationServer;
 use App\Models\Team;
 use App\Models\User;
 use App\Modules\ServiceSlides\Actions\ServicePlanner;
-use App\Modules\ServiceSlides\Mcp\ServiceSlidesServer;
 use App\Modules\ServiceSlides\Mcp\Tools\AddAlias;
 use App\Modules\ServiceSlides\Mcp\Tools\AddLibraryItem;
 use App\Modules\ServiceSlides\Mcp\Tools\CreateTemplate;
@@ -50,19 +50,18 @@ class ServiceSlidesMcpTest extends TestCase
             'slide_count' => 1,
         ]);
 
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(SearchLibrary::class, ['query' => 'Kumi'])
             ->assertOk()
             ->assertSee('Kumi Ori');
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddAlias::class, ['title' => 'Kumi Ori', 'alias' => 'Arise'])
             ->assertOk();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(UpsertServiceDeck::class, [
                 'date' => '2026-11-01',
                 'template' => 'Music',
@@ -81,11 +80,10 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
         $file = base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp')));
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Kumi Ori',
                 'kind' => 'song',
@@ -108,7 +106,7 @@ class ServiceSlidesMcpTest extends TestCase
             'alias' => 'Arise',
         ]);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Kumi Ori',
                 'kind' => 'song',
@@ -116,7 +114,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertHasErrors(['already in this congregation']);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Notes',
                 'kind' => 'other',
@@ -129,10 +127,9 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Adon Olam',
                 'kind' => 'song',
@@ -140,7 +137,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertOk();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Adon Olam',
                 'kind' => 'liturgy',
@@ -149,7 +146,7 @@ class ServiceSlidesMcpTest extends TestCase
             ->assertOk()
             ->assertSee('pptx');
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Adon Olam',
                 'kind' => 'song',
@@ -159,11 +156,11 @@ class ServiceSlidesMcpTest extends TestCase
 
         $this->assertSame(2, SlideSource::query()->where('team_id', $team->id)->where('title', 'Adon Olam')->count());
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddAlias::class, ['title' => 'Adon Olam', 'alias' => 'Master of the World'])
             ->assertHasErrors(['Pass its kind']);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddAlias::class, ['title' => 'Adon Olam', 'kind' => 'liturgy', 'alias' => 'Master of the World'])
             ->assertOk();
 
@@ -180,8 +177,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
         SlideSource::query()->create([
             'team_id' => $team->id,
             'kind' => 'song',
@@ -192,7 +188,7 @@ class ServiceSlidesMcpTest extends TestCase
             'slide_count' => 1,
         ]);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'kind' => 'liturgy',
                 'file' => base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/adon-olam.pptx'))),
@@ -214,8 +210,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
         $odp = (string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'));
         $pptx = (string) file_get_contents(base_path('tests/Fixtures/slides/adon-olam.pptx'));
         $requested = null;
@@ -234,7 +229,7 @@ class ServiceSlidesMcpTest extends TestCase
             return Http::response($odp, 200, ['Content-Type' => 'application/octet-stream']);
         });
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'From Dropbox',
                 'kind' => 'song',
@@ -249,7 +244,7 @@ class ServiceSlidesMcpTest extends TestCase
         $this->assertStringContainsString('dl=1', $requested);
         $this->assertNotNull(SlideSource::query()->where('team_id', $team->id)->where('title', 'From Dropbox')->first());
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Elsewhere',
                 'kind' => 'song',
@@ -257,7 +252,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertHasErrors(['Dropbox or Google Drive']);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Preview',
                 'kind' => 'song',
@@ -265,7 +260,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertHasErrors(['web page']);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'kind' => 'liturgy',
                 'url' => 'https://drive.google.com/file/d/1aOlcIaIVhPZBiJoOiePH1ralnX-Xh1wo/view',
@@ -280,10 +275,9 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'kind' => 'song',
                 'file' => base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'))),
@@ -296,18 +290,6 @@ class ServiceSlidesMcpTest extends TestCase
 
         $this->assertNotNull($source);
         $this->assertSame('Barry and Batya Segal', $source->author);
-    }
-
-    public function test_an_owner_can_create_a_token_for_the_current_congregation(): void
-    {
-        [$team, $owner] = $this->owner();
-
-        $this->actingAs($owner)
-            ->post(route('service-slides.tokens.store', $team), ['name' => 'Claude'])
-            ->assertRedirect();
-
-        $this->assertNotNull($owner->tokens()->first());
-        $this->assertContains('congregation:'.$team->id, $owner->tokens()->first()->abilities);
     }
 
     public function test_a_liturgy_template_can_be_created_with_slots_between_slides(): void
@@ -324,7 +306,7 @@ class ServiceSlidesMcpTest extends TestCase
             'slide_count' => 1,
         ]);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Adon Olam',
                 'kind' => 'liturgy',
@@ -332,7 +314,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertOk();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Liturgy',
                 'default_kind' => 'liturgy',
@@ -364,7 +346,7 @@ class ServiceSlidesMcpTest extends TestCase
         [$team, $owner] = $this->agent();
         [$first] = $this->twoLabels();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Liturgy',
                 'default_kind' => 'liturgy',
@@ -388,7 +370,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         [$team, $owner] = $this->agent();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Liturgy',
                 'default_kind' => 'liturgy',
@@ -396,7 +378,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertOk();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Liturgy',
                 'default_kind' => 'liturgy',
@@ -404,7 +386,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertHasErrors(['already a template']);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Notes',
                 'default_kind' => 'liturgy',
@@ -412,7 +394,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertHasErrors(['Upload an ODP or PPTX presentation.']);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Songs',
                 'default_kind' => 'song',
@@ -420,7 +402,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertHasErrors(['Songs must be ODP files.']);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'From Impress',
                 'default_kind' => 'liturgy',
@@ -428,7 +410,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertHasErrors(['Liturgy must be PPTX files.']);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Broken',
                 'default_kind' => 'liturgy',
@@ -447,7 +429,7 @@ class ServiceSlidesMcpTest extends TestCase
         [$team, $owner] = $this->agent();
         [$first, $second] = $this->twoLabels();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
                 'title' => 'Adon Olam',
                 'kind' => 'liturgy',
@@ -455,7 +437,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertOk();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Liturgy',
                 'default_kind' => 'liturgy',
@@ -463,7 +445,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertOk();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(SetPreset::class, [
                 'template' => 'Liturgy',
                 'steps' => [
@@ -476,7 +458,7 @@ class ServiceSlidesMcpTest extends TestCase
             ->assertSee($this->stepThenSlot($first, 'closing'))
             ->assertSee('"defaults":["Adon Olam"]');
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(ListTemplates::class)
             ->assertOk()
             ->assertSee($this->stepThenSlot($first, 'closing'))
@@ -492,7 +474,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         [$team, $owner] = $this->agent();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Liturgy',
                 'default_kind' => 'liturgy',
@@ -500,7 +482,7 @@ class ServiceSlidesMcpTest extends TestCase
             ])
             ->assertOk();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(SetPreset::class, [
                 'template' => 'Liturgy',
                 'steps' => [
@@ -515,7 +497,7 @@ class ServiceSlidesMcpTest extends TestCase
             $slide->update(['label' => 'Shared']);
         }
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(SetPreset::class, [
                 'template' => 'liturgy',
                 'steps' => [
@@ -530,7 +512,7 @@ class ServiceSlidesMcpTest extends TestCase
         [$team, $owner] = $this->agent();
         [$first] = $this->twoLabels();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Liturgy',
                 'default_kind' => 'liturgy',
@@ -541,7 +523,7 @@ class ServiceSlidesMcpTest extends TestCase
         $template = SlideTemplate::query()->where('team_id', $team->id)->where('name', 'Liturgy')->firstOrFail();
         $before = $template->preset;
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(SetPreset::class, [
                 'template' => 'Liturgy',
                 'steps' => [
@@ -559,7 +541,7 @@ class ServiceSlidesMcpTest extends TestCase
         [$team, $owner] = $this->agent();
         [$first, $second] = $this->twoLabels();
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(CreateTemplate::class, [
                 'name' => 'Liturgy',
                 'default_kind' => 'liturgy',
@@ -581,7 +563,7 @@ class ServiceSlidesMcpTest extends TestCase
 
         $this->assertGreaterThan(1, count($before));
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(SetPreset::class, [
                 'template' => 'Liturgy',
                 'steps' => [
@@ -637,11 +619,11 @@ class ServiceSlidesMcpTest extends TestCase
         $this->assertSame(['Item 26'], array_column($second['items'], 'title'));
         $this->assertArrayNotHasKey('nextCursor', $second);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(SearchLibrary::class, ['query' => 'Other', 'cursor' => $first['nextCursor']])
             ->assertHasErrors(['That cursor is not valid for this search.']);
 
-        ServiceSlidesServer::actingAs($owner)
+        CongregationServer::actingAs($owner)
             ->tool(SearchLibrary::class, ['query' => 'Item', 'cursor' => 'not-a-cursor'])
             ->assertHasErrors(['That cursor is not valid for this search.']);
     }
@@ -652,7 +634,7 @@ class ServiceSlidesMcpTest extends TestCase
      */
     private function libraryPage(User $owner, array $arguments): array
     {
-        $response = ServiceSlidesServer::actingAs($owner)
+        $response = CongregationServer::actingAs($owner)
             ->tool(SearchLibrary::class, $arguments)
             ->assertOk();
 
@@ -670,8 +652,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
 
         return [$team, $owner];
     }
