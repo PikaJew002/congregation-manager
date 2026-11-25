@@ -27,7 +27,7 @@ type Step = 'download' | 'rendition' | 'poster';
 interface Job {
     recording_id: number;
     step: Step;
-    rendition?: '480p' | '720p' | '1080p' | null;
+    rendition?: '360p' | '480p' | '720p' | '1080p' | null;
     directory: string;
     download_url?: string | null;
     download_token?: string | null;
@@ -84,7 +84,7 @@ export default {
         }
         if (
             job.step === 'rendition' &&
-            !['480p', '720p', '1080p'].includes(job.rendition ?? '')
+            !['360p', '480p', '720p', '1080p'].includes(job.rendition ?? '')
         ) {
             return new Response('Bad rendition', { status: 422 });
         }

@@ -68,14 +68,33 @@ class MediaWorkerTest extends TestCase
             && ! isset($request['download_token']));
     }
 
-    public function test_a_360p_source_skips_every_rendition_and_goes_to_the_poster(): void
+    public function test_a_source_too_short_for_480p_gets_the_360p_stream(): void
     {
         $recording = $this->recording(['media_step' => 'download', 'status' => 'downloading']);
 
         $this->report($recording, ['step' => 'download', 'ok' => true, 'height' => 360])->assertOk();
 
-        $this->assertSame('poster', $recording->fresh()->media_step);
-        Http::assertNotSent(fn (Request $request) => $request['step'] === 'rendition');
+        $this->assertSame('rendition:360p', $recording->fresh()->media_step);
+        Http::assertSent(fn (Request $request) => $request['step'] === 'rendition' && $request['rendition'] === '360p');
+        $this->assertSame(['download', 'rendition:360p', 'poster'], app(MediaWorker::class)->steps($recording->fresh()));
+    }
+
+    public function test_a_source_tall_enough_for_480p_does_not_get_the_360p_stream(): void
+    {
+        $recording = $this->recording(['source_height' => 480]);
+
+        $this->assertSame(['download', 'rendition:480p', 'poster'], app(MediaWorker::class)->steps($recording));
+    }
+
+    public function test_a_360p_recording_finishes_with_a_playable_master_playlist(): void
+    {
+        Storage::fake('r2-public');
+        $recording = $this->recording(['media_step' => 'poster', 'source_path' => 'x', 'source_height' => 360]);
+
+        $this->report($recording, ['step' => 'poster', 'ok' => true])->assertOk();
+
+        $master = Storage::disk('r2-public')->get((string) $recording->fresh()->hls_path);
+        $this->assertSame("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=568000,RESOLUTION=640x360\n360p/playlist.m3u8\n", $master);
     }
 
     public function test_the_last_rendition_for_720p_moves_to_the_poster(): void
@@ -99,9 +118,10 @@ class MediaWorkerTest extends TestCase
         $this->assertNull($recording->media_step);
         $this->assertSame('recordings/'.$recording->id.'/playlist.m3u8', $recording->hls_path);
         $master = Storage::disk('r2-public')->get($recording->hls_path);
-        $this->assertStringContainsString("RESOLUTION=854x480\n480p/playlist.m3u8", $master);
-        $this->assertStringContainsString("RESOLUTION=1280x720\n720p/playlist.m3u8", $master);
+        $this->assertStringContainsString("BANDWIDTH=678000,RESOLUTION=854x480\n480p/playlist.m3u8", $master);
+        $this->assertStringContainsString("BANDWIDTH=1448000,RESOLUTION=1280x720\n720p/playlist.m3u8", $master);
         $this->assertStringNotContainsString('1080p', $master);
+        $this->assertStringNotContainsString('360p', $master);
         Storage::disk('r2-public')->assertExists('recordings/recordings.json');
     }
 
