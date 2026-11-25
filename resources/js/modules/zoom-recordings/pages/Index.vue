@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { EyeOff, Pencil } from '@lucide/vue';
+import { Archive, ArchiveRestore, Pencil, Trash2 } from '@lucide/vue';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDateTime } from '@/lib/format';
 import { index, retry, settings, update } from '@/routes/zoom-recordings';
 import type { Team } from '@/types';
+import DeleteRecordingModal from '../components/DeleteRecordingModal.vue';
 import type { RecordingStatus, RecordingStep, ZoomRecording } from '../types';
 
 const props = defineProps<{
@@ -66,6 +66,47 @@ const processingStatuses: RecordingStatus[] = [
 ];
 
 let teamSlug = computed(() => page.props.currentTeam?.slug ?? '');
+
+// Archived recordings are the hidden ones: kept in storage, left out of the
+// website feed. They get their own view instead of mixing into the list.
+let view = ref<'current' | 'archived'>(
+    new URLSearchParams(window.location.search).get('view') === 'archived'
+        ? 'archived'
+        : 'current',
+);
+let currentRecordings = computed(() =>
+    props.recordings.filter((r) => !r.hidden),
+);
+let archivedRecordings = computed(() =>
+    props.recordings.filter((r) => r.hidden),
+);
+let shownRecordings = computed(() =>
+    view.value === 'archived'
+        ? archivedRecordings.value
+        : currentRecordings.value,
+);
+
+const showView = (next: 'current' | 'archived') => {
+    view.value = next;
+    const url = new URL(window.location.href);
+    if (next === 'archived') {
+        url.searchParams.set('view', 'archived');
+    } else {
+        url.searchParams.delete('view');
+    }
+    window.history.replaceState(window.history.state, '', url);
+};
+
+let deleting = ref<ZoomRecording | null>(null);
+let deleteOpen = ref(false);
+
+const confirmDelete = (recording: ZoomRecording) => {
+    deleting.value = recording;
+    deleteOpen.value = true;
+};
+
+const canDelete = (recording: ZoomRecording) =>
+    !processingStatuses.includes(recording.status);
 let editingId = ref<number | null>(null);
 let editForm = ref({ title: '', service: '', speaker: '', torah_portion: '' });
 
@@ -198,6 +239,30 @@ const retryRecording = (recording: ZoomRecording) => {
         </div>
 
         <div
+            v-if="recordings.length > 0"
+            class="flex gap-2"
+            role="group"
+            aria-label="Which recordings to show"
+        >
+            <Button
+                size="sm"
+                :variant="view === 'current' ? 'default' : 'outline'"
+                :aria-pressed="view === 'current'"
+                @click="showView('current')"
+            >
+                Recordings ({{ currentRecordings.length }})
+            </Button>
+            <Button
+                size="sm"
+                :variant="view === 'archived' ? 'default' : 'outline'"
+                :aria-pressed="view === 'archived'"
+                @click="showView('archived')"
+            >
+                Archived ({{ archivedRecordings.length }})
+            </Button>
+        </div>
+
+        <div
             v-if="recordings.length === 0"
             class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
         >
@@ -210,12 +275,22 @@ const retryRecording = (recording: ZoomRecording) => {
             >, new cloud recordings show up here.
         </div>
 
+        <div
+            v-else-if="shownRecordings.length === 0"
+            class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
+        >
+            {{
+                view === 'archived'
+                    ? 'No archived recordings. Archiving takes a recording off the website but keeps its files.'
+                    : 'Every recording is archived.'
+            }}
+        </div>
+
         <div v-else class="space-y-3">
             <div
-                v-for="recording in recordings"
+                v-for="recording in shownRecordings"
                 :key="recording.id"
                 class="rounded-lg border p-4"
-                :class="{ 'opacity-70': recording.hidden }"
             >
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div class="min-w-0 flex-1 space-y-1">
@@ -297,11 +372,6 @@ const retryRecording = (recording: ZoomRecording) => {
                             >
                                 <Pencil class="h-3.5 w-3.5" />
                             </Button>
-                            <EyeOff
-                                v-if="recording.hidden"
-                                class="h-4 w-4 text-muted-foreground"
-                                aria-label="Hidden from website"
-                            />
                         </div>
                         <p v-if="editingId !== recording.id" class="text-sm">
                             {{ details(recording) }}
@@ -315,21 +385,47 @@ const retryRecording = (recording: ZoomRecording) => {
                     </div>
 
                     <div class="flex items-center gap-3">
-                        <Badge :variant="statusVariant(recording.status)">
+                        <Badge v-if="recording.hidden" variant="secondary">
+                            Archived
+                        </Badge>
+                        <Badge
+                            v-else
+                            :variant="statusVariant(recording.status)"
+                        >
                             {{ statusLabels[recording.status] }}
                         </Badge>
-                        <label class="flex items-center gap-2 text-sm">
-                            <Checkbox
-                                :model-value="!recording.hidden"
-                                @update:model-value="
-                                    (value: boolean | 'indeterminate') =>
-                                        save(recording, {
-                                            hidden: value !== true,
-                                        })
-                                "
-                            />
-                            Show on website
-                        </label>
+                        <Button
+                            v-if="recording.hidden"
+                            size="sm"
+                            variant="outline"
+                            @click="save(recording, { hidden: false })"
+                        >
+                            <ArchiveRestore class="h-3.5 w-3.5" />
+                            Restore
+                        </Button>
+                        <Button
+                            v-else
+                            size="sm"
+                            variant="outline"
+                            @click="save(recording, { hidden: true })"
+                        >
+                            <Archive class="h-3.5 w-3.5" />
+                            Archive
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            :disabled="!canDelete(recording)"
+                            :title="
+                                canDelete(recording)
+                                    ? undefined
+                                    : 'Can be deleted once processing finishes'
+                            "
+                            :aria-label="`Delete ${recording.title}`"
+                            @click="confirmDelete(recording)"
+                        >
+                            <Trash2 class="h-3.5 w-3.5 text-destructive" />
+                        </Button>
                     </div>
                 </div>
 
@@ -396,5 +492,7 @@ const retryRecording = (recording: ZoomRecording) => {
                 </div>
             </div>
         </div>
+
+        <DeleteRecordingModal v-model:open="deleteOpen" :recording="deleting" />
     </div>
 </template>

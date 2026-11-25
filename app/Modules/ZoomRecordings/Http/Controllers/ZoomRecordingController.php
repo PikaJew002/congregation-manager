@@ -4,6 +4,7 @@ namespace App\Modules\ZoomRecordings\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Team;
+use App\Modules\ZoomRecordings\Actions\DeleteRecording;
 use App\Modules\ZoomRecordings\Actions\DispatchRecordingPipeline;
 use App\Modules\ZoomRecordings\Jobs\UpdateManifest;
 use App\Modules\ZoomRecordings\Models\ZoomRecording;
@@ -42,6 +43,23 @@ class ZoomRecordingController extends Controller
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Recording updated.')]);
+
+        return back();
+    }
+
+    public function destroy(Team $current_team, ZoomRecording $recording, DeleteRecording $delete): RedirectResponse
+    {
+        abort_unless($recording->team_id === $current_team->id, 404);
+
+        if (! DeleteRecording::canDelete($recording)) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('This recording is still processing. Delete it once it has finished or failed.')]);
+
+            return back();
+        }
+
+        $delete->handle($recording);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Recording deleted.')]);
 
         return back();
     }
