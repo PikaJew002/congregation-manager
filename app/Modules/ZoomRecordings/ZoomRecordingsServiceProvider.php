@@ -3,6 +3,7 @@
 namespace App\Modules\ZoomRecordings;
 
 use App\Http\Middleware\EnsureTeamMembership;
+use App\Modules\ZoomRecordings\Http\Controllers\MediaWorkerCallbackController;
 use App\Modules\ZoomRecordings\Http\Controllers\ZoomWebhookController;
 use App\Support\Modules\ModuleRegistry;
 use Illuminate\Support\Facades\Route;
@@ -27,5 +28,9 @@ class ZoomRecordingsServiceProvider extends ServiceProvider
         Route::middleware('web')
             ->post('webhooks/zoom/{team:uuid}', ZoomWebhookController::class)
             ->name('zoom-recordings.webhook');
+
+        Route::middleware('web')
+            ->post('webhooks/media-worker', MediaWorkerCallbackController::class)
+            ->name('zoom-recordings.media-worker');
     }
 }

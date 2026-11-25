@@ -1,0 +1,36 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "congregation-media-worker",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-06-01",
+	"observability": { "enabled": true },
+	"workers_dev": true,
+	"vars": {
+		"CALLBACK_URL": "https://congregation-manager.laravel.cloud/webhooks/media-worker",
+		"R2_ENDPOINT": "https://bef3de0781fc2ea0f6596f31a128d574.r2.cloudflarestorage.com",
+		"R2_FILES_BUCKET": "congregation-manager-files",
+		"R2_PUBLIC_BUCKET": "congregation-manager-recordings"
+	},
+	// Secrets (wrangler secret put): MEDIA_WORKER_SECRET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+	"containers": [
+		{
+			"class_name": "MediaSmall",
+			"image": "./container/Dockerfile",
+			"instance_type": "basic",
+			"max_instances": 3
+		},
+		{
+			"class_name": "MediaLarge",
+			"image": "./container/Dockerfile",
+			"instance_type": "standard-1",
+			"max_instances": 2
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{ "name": "MEDIA_SMALL", "class_name": "MediaSmall" },
+			{ "name": "MEDIA_LARGE", "class_name": "MediaLarge" }
+		]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["MediaSmall", "MediaLarge"] }]
+}

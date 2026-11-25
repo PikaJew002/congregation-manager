@@ -1,0 +1,12 @@
+{
+    "name": "congregation-manager/media-worker-container",
+    "description": "One download or one FFmpeg command per request.",
+    "type": "project",
+    "require": {
+        "php": "^8.3",
+        "aws/aws-sdk-php": "^3.300"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
