@@ -14,9 +14,8 @@ use Laravel\Mcp\Response;
  * Works out which congregation an MCP connection acts for, and whether the
  * signed-in user may use a given module there.
  *
- * OAuth connections pick a congregation on the approval screen; it is saved
- * on the token. Personal tokens carry a congregation:{id} ability and either
- * the module's key, "mcp" (every module), or "*".
+ * Connections are OAuth only: the congregation is picked on the approval
+ * screen and saved on the token (AuthenticateMcp reads it).
  */
 class CongregationContext
 {
@@ -32,10 +31,6 @@ class CongregationContext
 
         if (! $user instanceof User) {
             return Response::error('Sign in before using Congregation Manager tools.');
-        }
-
-        if (! $this->tokenAllows($user, $module)) {
-            return Response::error("This token cannot use {$name}. Create a new token or reconnect to include it.");
         }
 
         $team = $this->team($user);
@@ -56,7 +51,7 @@ class CongregationContext
     {
         $user = auth()->user();
 
-        if (! $user instanceof User || ! $this->tokenAllows($user, $module)) {
+        if (! $user instanceof User) {
             return false;
         }
 
@@ -67,21 +62,13 @@ class CongregationContext
 
     public function team(User $user): ?Team
     {
-        if (request()->attributes->get('mcp.oauth') === true) {
-            $teamId = request()->attributes->get('mcp.oauth_team_id');
-
-            return is_numeric($teamId) ? $user->teams()->where('teams.id', (int) $teamId)->first() : null;
+        if (request()->attributes->get('mcp.oauth') !== true) {
+            return null;
         }
 
-        $teamId = null;
+        $teamId = request()->attributes->get('mcp.oauth_team_id');
 
-        foreach ($user->currentAccessToken()?->abilities ?? [] as $ability) {
-            if (is_string($ability) && str_starts_with($ability, 'congregation:')) {
-                $teamId = (int) substr($ability, strlen('congregation:'));
-            }
-        }
-
-        return $teamId ? $user->teams()->where('teams.id', $teamId)->first() : $user->currentTeam;
+        return is_numeric($teamId) ? $user->teams()->where('teams.id', (int) $teamId)->first() : null;
     }
 
     /**
@@ -104,16 +91,5 @@ class CongregationContext
         }
 
         return false;
-    }
-
-    private function tokenAllows(User $user, string $module): bool
-    {
-        if (request()->attributes->get('mcp.oauth') === true) {
-            return true;
-        }
-
-        $token = $user->currentAccessToken();
-
-        return $token !== null && ($token->can($module) || $token->can('mcp') || $token->can('*'));
     }
 }

@@ -129,13 +129,6 @@ export type HistoryService = {
     decks: Array<{ name: string; items: string[] }>;
 };
 
-export type AccessToken = {
-    id: number;
-    name: string;
-    created_at: string;
-    last_used_at: string | null;
-};
-
 export type OAuthConnection = {
     id: string;
     name: string;

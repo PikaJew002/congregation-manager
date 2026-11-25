@@ -8,6 +8,11 @@ use Illuminate\Support\Facades\Auth;
 use Laravel\Passport\Passport;
 use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * Signs in an MCP request with an OAuth access token (from Claude, Cursor or
+ * another client that went through the approval screen) and records which
+ * congregation the token was approved for.
+ */
 class AuthenticateMcp
 {
     /**
@@ -21,12 +26,6 @@ class AuthenticateMcp
             Auth::shouldUse('api');
             $request->attributes->set('mcp.oauth', true);
             $request->attributes->set('mcp.oauth_team_id', $this->teamId($bearer));
-
-            return $next($request);
-        }
-
-        if (is_string($bearer) && ! str_contains($bearer, '.') && Auth::guard('sanctum')->check()) {
-            Auth::shouldUse('sanctum');
 
             return $next($request);
         }

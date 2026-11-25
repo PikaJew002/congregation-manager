@@ -50,8 +50,7 @@ class ServiceSlidesMcpTest extends TestCase
             'slide_count' => 1,
         ]);
 
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
 
         CongregationServer::actingAs($owner)
             ->tool(SearchLibrary::class, ['query' => 'Kumi'])
@@ -81,8 +80,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
         $file = base64_encode((string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp')));
 
         CongregationServer::actingAs($owner)
@@ -129,8 +127,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
 
         CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
@@ -180,8 +177,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
         SlideSource::query()->create([
             'team_id' => $team->id,
             'kind' => 'song',
@@ -214,8 +210,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
         $odp = (string) file_get_contents(base_path('tests/Fixtures/slides/kumi-ori.odp'));
         $pptx = (string) file_get_contents(base_path('tests/Fixtures/slides/adon-olam.pptx'));
         $requested = null;
@@ -280,8 +275,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
 
         CongregationServer::actingAs($owner)
             ->tool(AddLibraryItem::class, [
@@ -296,18 +290,6 @@ class ServiceSlidesMcpTest extends TestCase
 
         $this->assertNotNull($source);
         $this->assertSame('Barry and Batya Segal', $source->author);
-    }
-
-    public function test_an_owner_can_create_a_token_for_the_current_congregation(): void
-    {
-        [$team, $owner] = $this->owner();
-
-        $this->actingAs($owner)
-            ->post(route('service-slides.tokens.store', $team), ['name' => 'Claude'])
-            ->assertRedirect();
-
-        $this->assertNotNull($owner->tokens()->first());
-        $this->assertContains('congregation:'.$team->id, $owner->tokens()->first()->abilities);
     }
 
     public function test_a_liturgy_template_can_be_created_with_slots_between_slides(): void
@@ -670,8 +652,7 @@ class ServiceSlidesMcpTest extends TestCase
     {
         Storage::fake('files');
         [$team, $owner] = $this->owner();
-        $token = $owner->createToken('agent', ['service-slides', 'congregation:'.$team->id]);
-        $owner->withAccessToken($token->accessToken);
+        $this->approveMcp($team);
 
         return [$team, $owner];
     }

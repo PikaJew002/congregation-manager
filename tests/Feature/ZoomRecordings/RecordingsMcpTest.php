@@ -83,12 +83,19 @@ class RecordingsMcpTest extends TestCase
         $this->assertContains('search-library', $names);
     }
 
-    public function test_an_older_slides_only_token_cannot_use_recording_tools(): void
+    public function test_a_connection_without_an_approved_congregation_gets_no_tools(): void
     {
-        $names = $this->toolNames($this->server(abilities: ['service-slides']));
+        $this->assertSame([], $this->toolNames(CongregationServer::actingAs($this->owner)));
 
-        $this->assertNotContains('list-recordings', $names);
-        $this->assertContains('search-library', $names);
+        CongregationServer::actingAs($this->owner)->tool(ListRecordings::class)->assertHasErrors();
+    }
+
+    public function test_a_connection_approved_for_a_congregation_the_user_left_gets_no_tools(): void
+    {
+        $other = Team::factory()->create();
+        $this->approveMcp($other);
+
+        $this->assertSame([], $this->toolNames(CongregationServer::actingAs($this->owner)));
     }
 
     public function test_listing_defaults_to_current_recordings_by_date(): void
@@ -272,16 +279,11 @@ class RecordingsMcpTest extends TestCase
         return array_column($items, 'name');
     }
 
-    /**
-     * @param  list<string>  $abilities
-     */
-    private function server(?User $user = null, array $abilities = ['mcp']): PendingTestResponse
+    private function server(?User $user = null): PendingTestResponse
     {
-        $user ??= $this->owner;
-        $token = $user->createToken('agent', [...$abilities, 'congregation:'.$this->team->id]);
-        $user->withAccessToken($token->accessToken);
+        $this->approveMcp($this->team);
 
-        return CongregationServer::actingAs($user);
+        return CongregationServer::actingAs($user ?? $this->owner);
     }
 
     /**

@@ -225,15 +225,13 @@ class ServiceSlidesOAuthTest extends TestCase
         $this->assertNotSame($other->id, $team->id);
     }
 
-    public function test_a_sanctum_token_can_still_call_the_endpoint(): void
+    public function test_a_token_that_is_not_an_oauth_token_is_rejected(): void
     {
-        [$team, $owner] = $this->owner();
+        [$team] = $this->owner();
         $this->song($team, 'Kumi Ori');
-        $token = $owner->createToken('script', ['service-slides', 'congregation:'.$team->id]);
 
-        $this->callTool($token->plainTextToken, 'Kumi')
-            ->assertOk()
-            ->assertSee('Kumi Ori');
+        $this->callTool('1|plainpersonaltokenwithoutdots', 'Kumi')->assertUnauthorized();
+        $this->callTool('not.a.jwt', 'Kumi')->assertUnauthorized();
     }
 
     /**

@@ -30,7 +30,6 @@ declare module '@inertiajs/core' {
                 type: 'success' | 'info' | 'warning' | 'error';
                 message: string;
             };
-            plainTextToken?: string;
             fillResult?: {
                 deck: number;
                 unmatched: Record<string, string[]>;
