@@ -32,8 +32,8 @@ class DeleteRecording
             throw new RuntimeException('Refusing to delete an unexpected folder: '.$directory);
         }
 
-        if (filled($recording->hls_path) && ! $recording->hidden) {
-            $recording->update(['hidden' => true]);
+        if (filled($recording->hls_path) && ! $recording->isArchived()) {
+            $recording->update(['archived_at' => now()]);
             (new UpdateManifest($recording->id))->handle();
         }
 

@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Modules\ZoomRecordings\Jobs\UpdateManifest;
 use App\Modules\ZoomRecordings\Models\ZoomRecording;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -50,7 +52,7 @@ class DeleteAndArchiveTest extends TestCase
 
     public function test_an_archived_or_failed_recording_can_be_deleted(): void
     {
-        $archived = $this->published('2026-11-21', ['hidden' => true]);
+        $archived = $this->published('2026-11-21', ['archived_at' => '2026-11-20 12:00:00']);
         $failed = $this->published('2026-11-14', ['status' => 'failed', 'hls_path' => null]);
 
         foreach ([$archived, $failed] as $recording) {
@@ -98,10 +100,10 @@ class DeleteAndArchiveTest extends TestCase
         $this->files($archive);
 
         $this->actingAs($this->owner)
-            ->patch(route('zoom-recordings.update', [$this->team->slug, $archive]), ['title' => $archive->title, 'hidden' => true])
+            ->patch(route('zoom-recordings.update', [$this->team->slug, $archive]), ['title' => $archive->title, 'archived' => true])
             ->assertRedirect();
 
-        $this->assertTrue($archive->fresh()->hidden);
+        $this->assertNotNull($archive->fresh()->archived_at);
         $this->assertSame([$keep->id], $this->feedIds());
         Storage::disk('r2-public')->assertExists('recordings/'.$archive->id.'/playlist.m3u8');
         Storage::disk('files')->assertExists('recordings/'.$archive->id.'/source.mp4');
@@ -109,14 +111,64 @@ class DeleteAndArchiveTest extends TestCase
 
     public function test_restoring_puts_an_archived_recording_back_in_date_order(): void
     {
-        $newer = $this->published('2026-11-21', ['hidden' => true]);
+        $newer = $this->published('2026-11-21', ['archived_at' => '2026-11-20 12:00:00']);
         $older = $this->published('2026-11-14');
 
         $this->actingAs($this->owner)
-            ->patch(route('zoom-recordings.update', [$this->team->slug, $newer]), ['title' => $newer->title, 'hidden' => false])
+            ->patch(route('zoom-recordings.update', [$this->team->slug, $newer]), ['title' => $newer->title, 'archived' => false])
             ->assertRedirect();
 
         $this->assertSame([$newer->id, $older->id], $this->feedIds());
+    }
+
+    public function test_archiving_stamps_the_time_and_keeps_it_when_archived_again(): void
+    {
+        $recording = $this->published('2026-11-21');
+        $this->travelTo('2026-11-25 13:00:00');
+
+        $this->actingAs($this->owner)
+            ->patch(route('zoom-recordings.update', [$this->team->slug, $recording]), ['title' => 'Renamed', 'archived' => true])
+            ->assertRedirect();
+        $this->assertSame('2026-11-25 13:00:00', $recording->fresh()->archived_at->toDateTimeString());
+
+        $this->travelTo('2026-11-26 09:00:00');
+        $this->actingAs($this->owner)
+            ->patch(route('zoom-recordings.update', [$this->team->slug, $recording]), ['title' => 'Renamed again', 'archived' => true])
+            ->assertRedirect();
+
+        $recording->refresh();
+        $this->assertSame('Renamed again', $recording->title);
+        $this->assertSame('2026-11-25 13:00:00', $recording->archived_at->toDateTimeString());
+    }
+
+    public function test_restoring_clears_the_archive_time(): void
+    {
+        $recording = $this->published('2026-11-21', ['archived_at' => '2026-11-20 12:00:00']);
+
+        $this->actingAs($this->owner)
+            ->patch(route('zoom-recordings.update', [$this->team->slug, $recording]), ['title' => $recording->title, 'archived' => false])
+            ->assertRedirect();
+
+        $this->assertNull($recording->fresh()->archived_at);
+        $this->assertSame([$recording->id], $this->feedIds());
+    }
+
+    public function test_the_migration_dates_hidden_recordings_by_their_last_update(): void
+    {
+        $migration = require base_path('app/Modules/ZoomRecordings/database/migrations/2026_11_25_130000_replace_hidden_with_archived_at_on_zoom_recordings.php');
+        $migration->down();
+
+        $base = ['team_id' => $this->team->id, 'title' => 'x', 'status' => 'completed', 'created_at' => '2026-11-01 00:00:00'];
+        DB::table('zoom_recordings')->insert([
+            $base + ['meeting_uuid' => 'hidden-one', 'hidden' => true, 'updated_at' => '2026-11-25 13:05:35'],
+            $base + ['meeting_uuid' => 'shown-one', 'hidden' => false, 'updated_at' => '2026-11-25 13:06:32'],
+        ]);
+
+        $migration->up();
+
+        $this->assertFalse(Schema::hasColumn('zoom_recordings', 'hidden'));
+        $this->assertSame('2026-11-25 13:05:35', ZoomRecording::query()->where('meeting_uuid', 'hidden-one')->firstOrFail()->archived_at?->toDateTimeString());
+        $this->assertNull(ZoomRecording::query()->where('meeting_uuid', 'shown-one')->firstOrFail()->archived_at);
     }
 
     /**
@@ -137,7 +189,7 @@ class DeleteAndArchiveTest extends TestCase
             $recording->update(['hls_path' => $recording->directory().'/playlist.m3u8']);
         }
 
-        if ($recording->hls_path && ! $recording->hidden) {
+        if ($recording->hls_path && ! $recording->isArchived()) {
             (new UpdateManifest($recording->id))->handle();
         }
 

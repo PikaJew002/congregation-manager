@@ -203,7 +203,7 @@ class HebcalTest extends TestCase
     {
         $recording = $this->recording('2026-11-21 17:00:00');
 
-        $this->update($recording, ['title' => 'Vayetzei teaching', 'service' => 'Havdalah Service', 'speaker' => 'Rabbi Levi', 'torah_portion' => 'Vayetzei', 'hidden' => false])
+        $this->update($recording, ['title' => 'Vayetzei teaching', 'service' => 'Havdalah Service', 'speaker' => 'Rabbi Levi', 'torah_portion' => 'Vayetzei', 'archived' => false])
             ->assertRedirect();
 
         $recording->refresh();
@@ -216,7 +216,7 @@ class HebcalTest extends TestCase
     {
         $recording = $this->recording('2026-11-21 17:00:00', ['service' => 'Havdalah Service', 'speaker' => 'Rabbi Levi']);
 
-        $this->update($recording, ['title' => 'Shabbat', 'service' => '', 'speaker' => '', 'torah_portion' => '', 'hidden' => false])
+        $this->update($recording, ['title' => 'Shabbat', 'service' => '', 'speaker' => '', 'torah_portion' => '', 'archived' => false])
             ->assertRedirect();
 
         $recording->refresh();

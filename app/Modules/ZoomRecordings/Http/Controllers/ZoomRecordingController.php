@@ -34,8 +34,14 @@ class ZoomRecordingController extends Controller
             'service' => ['nullable', 'string', 'max:255'],
             'speaker' => ['nullable', 'string', 'max:255'],
             'torah_portion' => ['nullable', 'string', 'max:255'],
-            'hidden' => ['required', 'boolean'],
+            'archived' => ['required', 'boolean'],
         ]);
+        $archived = (bool) $data['archived'];
+        unset($data['archived']);
+
+        // The server stamps the time. Archiving an already archived recording
+        // keeps its original date.
+        $data['archived_at'] = $archived ? ($recording->archived_at ?? now()) : null;
         $recording->update($data);
 
         if (filled($recording->hls_path)) {

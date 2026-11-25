@@ -67,18 +67,22 @@ const processingStatuses: RecordingStatus[] = [
 
 let teamSlug = computed(() => page.props.currentTeam?.slug ?? '');
 
-// Archived recordings are the hidden ones: kept in storage, left out of the
-// website feed. They get their own view instead of mixing into the list.
+// Archived recordings are kept in storage but left out of the website feed.
+// They get their own view, newest archived first.
 let view = ref<'current' | 'archived'>(
     new URLSearchParams(window.location.search).get('view') === 'archived'
         ? 'archived'
         : 'current',
 );
 let currentRecordings = computed(() =>
-    props.recordings.filter((r) => !r.hidden),
+    props.recordings.filter((r) => r.archived_at === null),
 );
 let archivedRecordings = computed(() =>
-    props.recordings.filter((r) => r.hidden),
+    props.recordings
+        .filter((r) => r.archived_at !== null)
+        .sort((a, b) =>
+            (b.archived_at ?? '').localeCompare(a.archived_at ?? ''),
+        ),
 );
 let shownRecordings = computed(() =>
     view.value === 'archived'
@@ -194,7 +198,11 @@ const startEditing = (recording: ZoomRecording) => {
     };
 };
 
-const save = (recording: ZoomRecording, changes: Partial<ZoomRecording>) => {
+type Changes = Partial<
+    Pick<ZoomRecording, 'title' | 'service' | 'speaker' | 'torah_portion'>
+> & { archived?: boolean };
+
+const save = (recording: ZoomRecording, changes: Changes) => {
     router.visit(update([teamSlug.value, recording.id]), {
         data: {
             title: changes.title ?? recording.title,
@@ -210,7 +218,7 @@ const save = (recording: ZoomRecording, changes: Partial<ZoomRecording>) => {
                 changes.torah_portion !== undefined
                     ? changes.torah_portion
                     : recording.torah_portion,
-            hidden: changes.hidden ?? recording.hidden,
+            archived: changes.archived ?? recording.archived_at !== null,
         },
         preserveScroll: true,
         onSuccess: () => (editingId.value = null),
@@ -381,11 +389,15 @@ const retryRecording = (recording: ZoomRecording) => {
                             <template v-if="recording.duration_minutes">
                                 · {{ recording.duration_minutes }} min
                             </template>
+                            <template v-if="recording.archived_at">
+                                · Archived
+                                {{ formatDateTime(recording.archived_at) }}
+                            </template>
                         </p>
                     </div>
 
                     <div class="flex items-center gap-3">
-                        <Badge v-if="recording.hidden" variant="secondary">
+                        <Badge v-if="recording.archived_at" variant="secondary">
                             Archived
                         </Badge>
                         <Badge
@@ -395,10 +407,10 @@ const retryRecording = (recording: ZoomRecording) => {
                             {{ statusLabels[recording.status] }}
                         </Badge>
                         <Button
-                            v-if="recording.hidden"
+                            v-if="recording.archived_at"
                             size="sm"
                             variant="outline"
-                            @click="save(recording, { hidden: false })"
+                            @click="save(recording, { archived: false })"
                         >
                             <ArchiveRestore class="h-3.5 w-3.5" />
                             Restore
@@ -407,7 +419,7 @@ const retryRecording = (recording: ZoomRecording) => {
                             v-else
                             size="sm"
                             variant="outline"
-                            @click="save(recording, { hidden: true })"
+                            @click="save(recording, { archived: true })"
                         >
                             <Archive class="h-3.5 w-3.5" />
                             Archive

@@ -61,7 +61,7 @@ class LookUpHebcal
         ], fn ($value) => $value !== null));
         $recording->note('Looked up '.$date->toDateString().' on the Hebrew calendar.');
 
-        if (filled($recording->hls_path) && ! $recording->hidden) {
+        if (filled($recording->hls_path) && ! $recording->isArchived()) {
             (new UpdateManifest($recording->id))->handle();
         }
     }

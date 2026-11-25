@@ -75,7 +75,7 @@ class UpdateManifestTest extends TestCase
             (new UpdateManifest($recording->id))->handle();
         }
 
-        $b->update(['hidden' => true]);
+        $b->update(['archived_at' => now()]);
         (new UpdateManifest($b->id))->handle();
 
         $this->assertSame([$c->id, $a->id], $this->ids());
