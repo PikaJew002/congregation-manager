@@ -15,7 +15,7 @@ class GenerateDeck extends Tool
 {
     use ModuleTool;
 
-    protected string $description = 'Queue a merged deck for one service date. It is an ODP or PPTX file, matching the deck\'s template.';
+    protected string $description = 'Queue a merged deck for one service date. It is an ODP or PPTX file, matching the deck\'s template. Generating takes a moment; call get-service afterwards for the deck\'s status and, once it is ready, its download link.';
 
     public function __construct(private CongregationContext $context) {}
 

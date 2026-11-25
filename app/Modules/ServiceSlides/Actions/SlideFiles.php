@@ -7,6 +7,7 @@ use App\Modules\ServiceSlides\Models\ServiceDeck;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
 use App\Modules\ServiceSlides\Support\Preset;
+use App\Modules\ServiceSlides\Support\SearchText;
 use App\Modules\ServiceSlides\Support\SlideFormats;
 use App\Modules\ServiceSlides\Support\SongSlideFormatter;
 use Illuminate\Http\UploadedFile;
@@ -157,9 +158,39 @@ class SlideFiles
             'file_path' => $this->formatsAsSong($kind, $format) ? $this->formatSong($team->id, $local, $original)[0] : $original,
             'slide_count' => count($slides),
             'slide_lines' => array_map(fn (array $slide) => $slide['line'], $slides),
+            ...$this->slideTextAttributes($slides),
             'page_size' => $inspector->pageSize($local),
             'file_updated_at' => now(),
         ];
+    }
+
+    /**
+     * Every line of the slides decks use, and the same text normalized for library search.
+     *
+     * @param  list<array{lines: list<string>}>  $slides
+     * @return array{slide_text: list<list<string>>, search_text: string}
+     */
+    public function slideTextAttributes(array $slides): array
+    {
+        $text = array_map(fn (array $slide) => $slide['lines'], $slides);
+
+        return ['slide_text' => $text, 'search_text' => SearchText::forSlides($text)];
+    }
+
+    /**
+     * Reads the slide text of an item added before content search, from the file decks are built from.
+     */
+    public function indexSlideText(SlideSource $source): void
+    {
+        $local = tempnam(sys_get_temp_dir(), 'library-text-');
+        file_put_contents($local, Storage::disk('files')->get($source->file_path));
+
+        try {
+            $inspector = $this->formats->inspector($this->formats->detect($local) ?? $source->original_format);
+            $source->update($this->slideTextAttributes($inspector->usedSlides($inspector->slides($local))));
+        } finally {
+            @unlink($local);
+        }
     }
 
     private function formatsAsSong(string $kind, ?string $format): bool

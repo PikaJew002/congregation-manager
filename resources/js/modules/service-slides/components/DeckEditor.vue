@@ -2,7 +2,7 @@
 import { router } from '@inertiajs/vue3';
 import { GripVertical, Plus, Trash2, X } from '@lucide/vue';
 import { VueDraggable } from 'vue-draggable-plus';
-import { computed, ref, watch } from 'vue';
+import { computed, ref, toRef, watch } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import {
     toRows,
     type DeckRow,
 } from '../deckRows';
+import { highlight, useContentSearch } from '../contentSearch';
 import type { DeckEntry, ServiceDeck, SlideKinds, SlideSource } from '../types';
 
 const props = defineProps<{
@@ -72,17 +73,27 @@ let slots = computed(() =>
 
 let repeatingSlots = computed(() => slots.value.filter((slot) => slot.repeat));
 
-let filteredSources = computed(() => {
-    const term = sourceSearch.value.trim().toLowerCase();
+let pickerKind = computed(() => {
     const slot = slots.value.find((item) => item.key === selectedSlot.value);
-    const kind = allKinds.value ? null : (slot?.kind ?? null);
+
+    return allKinds.value ? null : (slot?.kind ?? null);
+});
+
+let { matches: contentMatches, searching } = useContentSearch({
+    teamSlug: toRef(props, 'teamSlug'),
+    term: sourceSearch,
+    kind: pickerKind,
+});
+
+const fitsPicker = (source: SlideSource) =>
+    source.original_format === props.deck.template.format &&
+    (!pickerKind.value || source.kind === pickerKind.value);
+
+let titleMatches = computed(() => {
+    const term = sourceSearch.value.trim().toLowerCase();
 
     return props.sources.filter((source) => {
-        if (source.original_format !== props.deck.template.format) {
-            return false;
-        }
-
-        if (kind && source.kind !== kind) {
+        if (!fitsPicker(source)) {
             return false;
         }
 
@@ -98,6 +109,28 @@ let filteredSources = computed(() => {
         );
     });
 });
+
+/** Items found only by the words on their slides, listed after title matches. */
+let slideTextMatches = computed(() => {
+    const listed = new Set(titleMatches.value.map((source) => source.id));
+
+    return props.sources.filter(
+        (source) =>
+            !listed.has(source.id) &&
+            contentMatches.value.has(source.id) &&
+            fitsPicker(source),
+    );
+});
+
+let filteredSources = computed(() => [
+    ...titleMatches.value,
+    ...slideTextMatches.value,
+]);
+
+const slideTextMatch = (source: SlideSource) =>
+    slideTextMatches.value.includes(source)
+        ? contentMatches.value.get(source.id)
+        : undefined;
 
 let canDownload = computed(
     () =>
@@ -536,7 +569,7 @@ watch(
                     <Input
                         v-model="sourceSearch"
                         type="search"
-                        placeholder="Title or alias"
+                        placeholder="Title, alias, or words on slides"
                     />
                 </div>
             </div>
@@ -549,11 +582,33 @@ watch(
                     v-for="source in filteredSources"
                     :key="source.id"
                     type="button"
-                    class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted/50"
+                    class="flex w-full items-start justify-between gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted/50"
                     @click="addSource(source)"
                 >
-                    <span>{{ source.title }}</span>
-                    <span class="text-muted-foreground">{{
+                    <span class="min-w-0">
+                        <span class="block">{{ source.title }}</span>
+                        <span
+                            v-if="slideTextMatch(source)?.excerpt"
+                            class="block text-xs text-muted-foreground"
+                        >
+                            Slide {{ slideTextMatch(source)?.slide }}:
+                            <template
+                                v-for="(part, index) in highlight(
+                                    slideTextMatch(source)?.excerpt ?? '',
+                                    sourceSearch,
+                                )"
+                                :key="index"
+                            >
+                                <strong
+                                    v-if="part.match"
+                                    class="text-foreground"
+                                    >{{ part.text }}</strong
+                                >
+                                <template v-else>{{ part.text }}</template>
+                            </template>
+                        </span>
+                    </span>
+                    <span class="shrink-0 text-muted-foreground">{{
                         kinds[source.kind] ?? source.kind
                     }}</span>
                 </button>
@@ -561,7 +616,11 @@ watch(
                     v-if="filteredSources.length === 0"
                     class="p-3 text-sm text-muted-foreground"
                 >
-                    No library items match.
+                    {{
+                        searching
+                            ? 'Searching slides…'
+                            : 'No library items match.'
+                    }}
                 </p>
             </div>
         </div>

@@ -8,16 +8,21 @@ use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Models\ServiceDeckEntry;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideSourceAlias;
+use App\Modules\ServiceSlides\Support\LibrarySearch;
 use App\Modules\ServiceSlides\Support\ResolvesPresentationUpload;
+use App\Modules\ServiceSlides\Support\SlideFileLinks;
 use App\Modules\ServiceSlides\Support\SlideFormats;
 use App\Modules\ServiceSlides\Support\SlideLinkDownloader;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class LibraryController extends Controller
 {
@@ -35,10 +40,53 @@ class LibraryController extends Controller
             'sources' => SlideSource::query()->forTeam($current_team)
                 ->select('slide_sources.*')
                 ->selectSub($lastUsed, 'last_used_on')
+                ->selectRaw('slide_sources.original_path <> slide_sources.file_path as has_original_file')
                 ->with('aliases:id,slide_source_id,alias')
                 ->orderBy('title')
                 ->get(),
             'kinds' => config('modules.slide_kinds'),
+        ]);
+    }
+
+    /**
+     * The file decks are built from, or with file=original the upload as received.
+     */
+    public function download(Request $request, Team $current_team, SlideSource $source, SlideFileLinks $links): StreamedResponse
+    {
+        $this->authorizeSource($current_team, $source);
+        $file = $request->validate(['file' => ['nullable', Rule::in(SlideFileLinks::FILES)]])['file'] ?? 'formatted';
+        $path = $links->sourcePath($source, $file);
+        abort_unless(Storage::disk('files')->exists($path), 404);
+
+        return Storage::disk('files')->download($path, $links->sourceName($source, $file));
+    }
+
+    /**
+     * Library items whose slide text matches, for pages that filter titles in the browser.
+     */
+    public function search(Request $request, Team $current_team, LibrarySearch $search): JsonResponse
+    {
+        $data = $request->validate([
+            'q' => ['required', 'string', 'max:200'],
+            'kind' => ['nullable', 'string'],
+            'archived' => ['nullable', 'boolean'],
+        ]);
+
+        $found = $search->search(
+            $current_team,
+            $data['q'],
+            ($data['kind'] ?? null) ?: null,
+            'content',
+            withArchived: (bool) ($data['archived'] ?? false),
+            limit: 50,
+        );
+
+        return response()->json([
+            'items' => array_map(fn (array $item) => [
+                'id' => $item['id'],
+                'slide' => $item['slide'] ?? null,
+                'excerpt' => $item['excerpt'] ?? null,
+            ], $found['items']),
         ]);
     }
 

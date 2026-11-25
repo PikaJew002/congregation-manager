@@ -13,12 +13,14 @@ import { destroy as destroyAlias } from '@/routes/service-slides/aliases';
 import {
     aliases,
     destroy,
+    download,
     file,
     restore,
     store,
     update,
 } from '@/routes/service-slides/library';
 import type { Team } from '@/types';
+import { highlight, useContentSearch } from '../contentSearch';
 import type { SlideKinds, SlideSource } from '../types';
 
 const props = defineProps<{
@@ -60,15 +62,25 @@ let uploading = ref(false);
 let replaceUrl = ref('');
 let replaceUrlError = ref('');
 
-let filtered = computed(() => {
+let contentKind = computed(() =>
+    kindFilter.value === 'all' ? null : kindFilter.value,
+);
+let { matches: contentMatches, searching } = useContentSearch({
+    teamSlug,
+    term: search,
+    kind: contentKind,
+    archived: showArchived,
+});
+
+const isListed = (source: SlideSource) =>
+    (showArchived.value || !source.archived) &&
+    (kindFilter.value === 'all' || source.kind === kindFilter.value);
+
+let titleMatches = computed(() => {
     const term = search.value.trim().toLowerCase();
 
     return props.sources.filter((source) => {
-        if (!showArchived.value && source.archived) {
-            return false;
-        }
-
-        if (kindFilter.value !== 'all' && source.kind !== kindFilter.value) {
+        if (!isListed(source)) {
             return false;
         }
 
@@ -85,6 +97,28 @@ let filtered = computed(() => {
         );
     });
 });
+
+/** Items found only by the words on their slides, listed after title matches. */
+let slideTextMatches = computed(() => {
+    const listed = new Set(titleMatches.value.map((source) => source.id));
+
+    return props.sources.filter(
+        (source) =>
+            !listed.has(source.id) &&
+            contentMatches.value.has(source.id) &&
+            isListed(source),
+    );
+});
+
+let filtered = computed(() => [
+    ...titleMatches.value,
+    ...slideTextMatches.value,
+]);
+
+const slideTextMatch = (source: SlideSource) =>
+    slideTextMatches.value.includes(source)
+        ? contentMatches.value.get(source.id)
+        : undefined;
 
 const startEdit = (source: SlideSource) => {
     editingId.value = source.id;
@@ -279,7 +313,7 @@ const replaceFromUrl = (source: SlideSource) => {
                 <Input
                     v-model="search"
                     type="search"
-                    placeholder="Search title or alias"
+                    placeholder="Search title, alias, or words on slides"
                     class="max-w-xs"
                 />
                 <select v-model="kindFilter" :class="selectClass" class="w-40">
@@ -306,7 +340,9 @@ const replaceFromUrl = (source: SlideSource) => {
                 v-if="filtered.length === 0"
                 class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
             >
-                No library items match.
+                {{
+                    searching ? 'Searching slides…' : 'No library items match.'
+                }}
             </p>
 
             <div v-else class="space-y-3">
@@ -352,6 +388,26 @@ const replaceFromUrl = (source: SlideSource) => {
                                 <template v-if="source.last_used_on">
                                     · last used
                                     {{ formatDate(source.last_used_on) }}
+                                </template>
+                            </p>
+                            <p
+                                v-if="slideTextMatch(source)?.excerpt"
+                                class="mt-1 text-sm"
+                            >
+                                <span class="text-muted-foreground"
+                                    >Slide {{ slideTextMatch(source)?.slide }}:
+                                </span>
+                                <template
+                                    v-for="(part, index) in highlight(
+                                        slideTextMatch(source)?.excerpt ?? '',
+                                        search,
+                                    )"
+                                    :key="index"
+                                >
+                                    <strong v-if="part.match">{{
+                                        part.text
+                                    }}</strong>
+                                    <template v-else>{{ part.text }}</template>
                                 </template>
                             </p>
                         </div>
@@ -429,6 +485,21 @@ const replaceFromUrl = (source: SlideSource) => {
                             >
                                 {{ source.archived ? 'Restore' : 'Archive' }}
                             </Button>
+                            <a
+                                :href="download.url([teamSlug, source.id])"
+                                class="inline-flex h-8 items-center rounded-md border border-input px-3 text-sm hover:bg-accent"
+                                >Download</a
+                            >
+                            <a
+                                v-if="source.has_original_file"
+                                :href="
+                                    download.url([teamSlug, source.id], {
+                                        query: { file: 'original' },
+                                    })
+                                "
+                                class="inline-flex h-8 items-center rounded-md border border-input px-3 text-sm hover:bg-accent"
+                                >Download original</a
+                            >
                             <label
                                 class="inline-flex h-8 cursor-pointer items-center rounded-md border border-input px-3 text-sm hover:bg-accent"
                                 :class="{
