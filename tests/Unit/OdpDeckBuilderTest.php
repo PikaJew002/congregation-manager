@@ -62,6 +62,37 @@ class OdpDeckBuilderTest extends TestCase
         $this->assertReferencesResolve($destination);
     }
 
+    public function test_songs_with_identical_masters_but_different_backgrounds_keep_their_own_master(): void
+    {
+        $white = storage_path('framework/testing/edited-white-kumi-ori.odp');
+        copy($this->fixture('kumi-ori.odp'), $white);
+        $zip = new ZipArchive;
+        $zip->open($white);
+        $styles = $zip->getFromName('styles.xml');
+        $zip->addFromString('styles.xml', preg_replace(
+            '/(<style:style style:name="Mdp1" style:family="drawing-page"><style:drawing-page-properties [^>]*?)draw:fill="bitmap" draw:fill-image-name="background"/',
+            '$1draw:fill="solid" draw:fill-color="#ffffff"',
+            $styles,
+            1,
+        ));
+        $zip->close();
+
+        $destination = storage_path('framework/testing/merged-music-backgrounds.odp');
+        (new OdpDeckBuilder)->build(
+            $this->fixture('music-template.odp'),
+            [
+                ['type' => 'source', 'path' => $this->fixture('kumi-ori.odp')],
+                ['type' => 'source', 'path' => $white],
+            ],
+            $destination,
+        );
+
+        [$content] = $this->documents($destination);
+        preg_match_all('/<draw:page\b[^>]*draw:master-page-name="([^"]+)"/', $content, $matches);
+        $this->assertCount(2, array_unique($matches[1]));
+        $this->assertReferencesResolve($destination);
+    }
+
     private function fixture(string $name): string
     {
         return base_path('tests/Fixtures/slides/'.$name);

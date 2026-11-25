@@ -101,7 +101,7 @@ class OdpDeckBuilder implements DeckBuilder
         $scale = $this->scale($templateSize, $sourceSize, $warnings, $label);
 
         $selected = $this->selectedPages($sourceContent, $onlySlides);
-        $masterContentHashes = $this->masterContentHashes($sourceStyles);
+        $masterContentHashes = $this->masterContentHashes($sourceStyles, $sourceFiles);
         $names = $this->collectNames($sourceContent, $sourceStyles);
         $renames = [];
         foreach ($names as $name) {
@@ -297,9 +297,13 @@ class OdpDeckBuilder implements DeckBuilder
     }
 
     /**
+     * Masters from different songs often share their XML word for word but not their background, so the hash covers
+     * the master's drawing-page style and the bytes of its fill image too.
+     *
+     * @param  array<string, string>  $files
      * @return array<string, string>
      */
-    private function masterContentHashes(DOMDocument $styles): array
+    private function masterContentHashes(DOMDocument $styles, array $files): array
     {
         $hashes = [];
         $masters = $this->first($styles, self::OFFICE, 'master-styles');
@@ -308,10 +312,23 @@ class OdpDeckBuilder implements DeckBuilder
             return $hashes;
         }
 
+        $pageStyles = [];
+        foreach ($styles->getElementsByTagNameNS(self::STYLE, 'style') as $style) {
+            $pageStyles[$style->getAttributeNS(self::STYLE, 'name')] = $style;
+        }
+        $fillImages = [];
+        foreach ($styles->getElementsByTagNameNS(self::DRAW, 'fill-image') as $image) {
+            $href = $image->getAttributeNS(self::XLINK, 'href');
+            $fillImages[$image->getAttributeNS(self::DRAW, 'name')] = isset($files[$href]) ? hash('sha256', $files[$href]) : $href;
+        }
+
         foreach ($masters->childNodes as $child) {
             if ($child instanceof DOMElement && $child->localName === 'master-page') {
                 $name = $child->getAttributeNS(self::STYLE, 'name');
-                $hashes[$name] = hash('sha256', $child->C14N());
+                $background = $pageStyles[$child->getAttributeNS(self::DRAW, 'style-name')] ?? null;
+                $properties = $background?->getElementsByTagNameNS(self::STYLE, 'drawing-page-properties')->item(0);
+                $image = $properties?->getAttributeNS(self::DRAW, 'fill-image-name') ?? '';
+                $hashes[$name] = hash('sha256', $child->C14N()."\0".$background?->C14N()."\0".($fillImages[$image] ?? ''));
             }
         }
 
