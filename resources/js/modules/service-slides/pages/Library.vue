@@ -340,7 +340,9 @@ const replaceFromUrl = (source: SlideSource) => {
                 v-if="filtered.length === 0"
                 class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
             >
-                {{ searching ? 'Searching slides…' : 'No library items match.' }}
+                {{
+                    searching ? 'Searching slides…' : 'No library items match.'
+                }}
             </p>
 
             <div v-else class="space-y-3">
