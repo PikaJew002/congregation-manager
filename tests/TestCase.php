@@ -4,6 +4,7 @@ namespace Tests;
 
 use App\Models\Team;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Http;
 use Laravel\Fortify\Features;
 use Laravel\Passport\Passport;
 use RuntimeException;
@@ -17,6 +18,9 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Tests never reach real services; fake each request a test needs.
+        Http::preventStrayRequests();
 
         if (self::$passportPrivateKey === null || self::$passportPublicKey === null) {
             $resource = openssl_pkey_new([

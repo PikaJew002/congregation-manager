@@ -51,6 +51,14 @@ class ServiceSlidesPagesTest extends TestCase
                 ->has('templates.0.steps'));
 
         $this->assertNotNull($template->fresh());
+
+        // A plain date, not UTC midnight: browsers west of UTC would show the day before.
+        $this->actingAs($owner)
+            ->get(route('service-slides.services', $team->slug))
+            ->assertInertia(fn (Assert $page) => $page->where('services.0.service_date', '2026-11-01'));
+        $this->actingAs($owner)
+            ->get(route('service-slides.services.show', [$team->slug, $result['service']]))
+            ->assertInertia(fn (Assert $page) => $page->where('service.service_date', '2026-11-01'));
     }
 
     private function template(Team $team, string $name, bool $history): SlideTemplate

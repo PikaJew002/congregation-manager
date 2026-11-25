@@ -93,11 +93,38 @@ class ZoomWebhookTest extends TestCase
         $recording = ZoomRecording::query()->firstOrFail();
         $this->assertSame('https://zoom.example/download', $recording->download_url);
         $this->assertSame('token', $recording->download_token);
+        $this->assertSame('2026-11-01 14:00:00', $recording->getRawOriginal('recorded_at'));
         Bus::assertChained([
             DownloadRecording::class,
             TranscodeAndUpload::class,
             UpdateManifest::class,
         ]);
+    }
+
+    public function test_a_start_time_with_an_offset_is_stored_as_utc(): void
+    {
+        Bus::fake();
+        $team = $this->team();
+        ZoomRecordingSetting::forTeam($team)->update(['webhook_secret' => 'top-secret']);
+
+        $this->signed($team, [
+            'event' => 'recording.completed',
+            'download_token' => 'token',
+            'payload' => ['object' => [
+                'uuid' => 'meeting-2',
+                'start_time' => '2026-11-27T19:30:00-05:00',
+                'recording_files' => [[
+                    'id' => 'file-2',
+                    'file_type' => 'MP4',
+                    'recording_type' => 'shared_screen_with_speaker_view',
+                    'download_url' => 'https://zoom.example/download',
+                ]],
+            ]],
+        ])->assertOk();
+
+        $recording = ZoomRecording::query()->sole();
+        $this->assertSame('2026-11-28 00:30:00', $recording->getRawOriginal('recorded_at'));
+        $this->assertSame('2026-11-27', $recording->localDate()?->toDateString());
     }
 
     public function test_a_second_event_refreshes_the_download_link_before_the_file_is_stored(): void

@@ -41,7 +41,6 @@ export type ZoomRecordingSettings = {
     r2_prefix: string;
     public_base_url: string | null;
     preferred_recording_type: string;
-    timezone: string;
     has_webhook_secret: boolean;
     webhook_url: string;
 };

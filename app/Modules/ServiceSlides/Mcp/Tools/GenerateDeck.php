@@ -22,7 +22,7 @@ class GenerateDeck extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'date' => $schema->string()->description('Service date, YYYY-MM-DD.')->required(),
+            'date' => $schema->string()->description('Service date, YYYY-MM-DD: the day in the congregation\'s time zone (see the server instructions for today).')->required(),
             'template' => $schema->string()->description('Template name or deck name.')->required(),
         ];
     }
@@ -44,7 +44,7 @@ class GenerateDeck extends Tool
             'template' => ['required', 'string'],
         ]);
 
-        $service = Service::query()->forTeam($team)->whereDate('service_date', $data['date'])->first();
+        $service = Service::query()->forTeam($team)->whereDate('service_date', $team->localDate($data['date']))->first();
         $deck = $service?->decks()->where(function ($query) use ($data) {
             $query->where('name', $data['template'])
                 ->orWhereHas('template', fn ($template) => $template->where('name', $data['template'])->orWhere('default_kind', $data['template']));
@@ -61,6 +61,6 @@ class GenerateDeck extends Tool
         $deck->update(['status' => 'generating']);
         GenerateServiceDeck::dispatch($deck->id);
 
-        return Response::json(['date' => $data['date'], 'deck' => $deck->name, 'status' => 'queued']);
+        return Response::json(['date' => $service->service_date->toDateString(), 'deck' => $deck->name, 'status' => 'queued']);
     }
 }

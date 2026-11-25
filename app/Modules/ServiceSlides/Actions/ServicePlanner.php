@@ -3,11 +3,13 @@
 namespace App\Modules\ServiceSlides\Actions;
 
 use App\Models\Team;
+use App\Modules\ServiceSlides\Jobs\NameServiceFromCalendar;
 use App\Modules\ServiceSlides\Models\Service;
 use App\Modules\ServiceSlides\Models\ServiceDeck;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
 use App\Modules\ServiceSlides\Support\Preset;
+use App\Support\HebrewCalendar;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -19,6 +21,28 @@ class ServicePlanner
     private array $library = [];
 
     public function __construct(private Preset $preset) {}
+
+    /**
+     * The congregation's service on a date (a day in its time zone), created
+     * if needed. A new service without a title gets the default Shabbat title
+     * and is renamed afterwards when the date is a major holiday. An existing
+     * service is returned as it is.
+     */
+    public function service(Team $team, string $date, ?string $title = null, string $source = 'manual'): Service
+    {
+        $title = filled($title) ? trim($title) : null;
+
+        $service = Service::query()->firstOrCreate(
+            ['team_id' => $team->id, 'service_date' => $team->localDate($date)],
+            ['title' => $title ?? HebrewCalendar::DEFAULT_SERVICE, 'source' => $source],
+        );
+
+        if ($service->wasRecentlyCreated && $title === null) {
+            NameServiceFromCalendar::dispatch($service->id)->afterResponse();
+        }
+
+        return $service;
+    }
 
     public function createDeck(Service $service, SlideTemplate $template): ServiceDeck
     {
@@ -182,14 +206,14 @@ class ServicePlanner
      *
      * @throws InvalidArgumentException
      */
-    public function upsert(Team $team, string $date, string $templateName, ?array $titles = null, ?array $slots = null, string $source = 'manual'): array
+    public function upsert(Team $team, string $date, string $templateName, ?array $titles = null, ?array $slots = null, string $source = 'manual', ?string $serviceTitle = null): array
     {
         $template = $this->template($team, $templateName);
+        $service = $this->service($team, $date, $serviceTitle, $source);
 
-        $service = Service::query()->firstOrCreate(
-            ['team_id' => $team->id, 'service_date' => $date],
-            ['title' => $date, 'source' => $source],
-        );
+        if (! $service->wasRecentlyCreated && filled($serviceTitle) && $service->title !== trim($serviceTitle)) {
+            $service->update(['title' => trim($serviceTitle)]);
+        }
 
         $deck = $service->decks()->where('slide_template_id', $template->id)->first()
             ?? $this->createDeck($service, $template);

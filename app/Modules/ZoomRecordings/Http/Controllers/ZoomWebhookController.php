@@ -9,6 +9,7 @@ use App\Modules\ZoomRecordings\Jobs\LookUpRecordingDate;
 use App\Modules\ZoomRecordings\Models\ZoomRecording;
 use App\Modules\ZoomRecordings\Models\ZoomRecordingSetting;
 use App\Support\Modules\ModuleAccess;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -53,7 +54,8 @@ class ZoomWebhookController extends Controller
             [
                 'meeting_id' => $object['id'] ?? null,
                 'title' => $object['topic'] ?? 'Recording',
-                'recorded_at' => $object['start_time'] ?? null,
+                // Zoom sends UTC ("...Z"); convert any other offset so the stored time is UTC.
+                'recorded_at' => filled($object['start_time'] ?? null) ? CarbonImmutable::parse($object['start_time'])->utc() : null,
                 'duration_minutes' => $object['duration'] ?? null,
                 'download_url' => $downloadUrl,
                 'download_token' => $downloadToken,

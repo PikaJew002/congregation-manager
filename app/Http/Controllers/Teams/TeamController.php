@@ -64,6 +64,7 @@ class TeamController extends Controller
                 'name' => $team->name,
                 'slug' => $team->slug,
                 'isPersonal' => $team->is_personal,
+                'timezone' => $team->localTimezone(),
             ],
             'modules' => $catalog,
             'members' => $team->members()->get()->map(function (User $member) use ($access, $team) {
@@ -105,7 +106,7 @@ class TeamController extends Controller
         $team = DB::transaction(function () use ($request, $team) {
             $team = Team::whereKey($team->id)->lockForUpdate()->firstOrFail();
 
-            $team->update(['name' => $request->validated('name')]);
+            $team->update($request->safe()->only(['name', 'timezone']));
 
             return $team;
         });

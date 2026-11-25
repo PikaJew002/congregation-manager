@@ -157,6 +157,7 @@ trait HasTeams
             role: $role?->value,
             roleLabel: $role?->label(),
             isCurrent: $this->isCurrentTeam($team),
+            timezone: $team->localTimezone(),
         );
     }
 

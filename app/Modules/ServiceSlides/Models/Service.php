@@ -14,7 +14,7 @@ class Service extends Model
 
     protected function casts(): array
     {
-        return ['service_date' => 'date'];
+        return ['service_date' => 'date:Y-m-d'];
     }
 
     public function decks(): HasMany

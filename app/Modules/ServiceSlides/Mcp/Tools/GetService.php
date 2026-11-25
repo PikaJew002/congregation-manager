@@ -21,7 +21,7 @@ class GetService extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'date' => $schema->string()->description('Service date, YYYY-MM-DD.')->required(),
+            'date' => $schema->string()->description('Service date, YYYY-MM-DD: the day in the congregation\'s time zone (see the server instructions for today).')->required(),
         ];
     }
 
@@ -38,7 +38,7 @@ class GetService extends Tool
         }
 
         $data = $request->validate(['date' => ['required', 'date']]);
-        $service = Service::query()->forTeam($team)->whereDate('service_date', $data['date'])->first();
+        $service = Service::query()->forTeam($team)->whereDate('service_date', $team->localDate($data['date']))->first();
 
         if (! $service) {
             return Response::error('No service on that date.');

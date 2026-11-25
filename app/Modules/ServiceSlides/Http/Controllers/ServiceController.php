@@ -43,10 +43,7 @@ class ServiceController extends Controller
             'template_ids.*' => ['integer', Rule::exists('slide_templates', 'id')->where('team_id', $current_team->id)],
         ]);
 
-        $service = Service::query()->firstOrCreate(
-            ['team_id' => $current_team->id, 'service_date' => $data['service_date']],
-            ['title' => $data['title'] ?: $data['service_date'], 'source' => 'manual'],
-        );
+        $service = $planner->service($current_team, $data['service_date'], $data['title'] ?? null);
 
         foreach ($data['template_ids'] ?? [] as $templateId) {
             if (! $service->decks()->where('slide_template_id', $templateId)->exists()) {

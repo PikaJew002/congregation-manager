@@ -169,7 +169,6 @@ class WeeklyEmailTest extends TestCase
             'enabled' => true,
             'send_day' => CarbonImmutable::parse('2026-11-01 09:05', 'America/New_York')->dayOfWeek,
             'send_time' => '09:00',
-            'timezone' => 'America/New_York',
             'window_minutes' => 120,
             'zoom_link' => 'https://zoom.example/j/1',
         ]);
@@ -183,6 +182,28 @@ class WeeklyEmailTest extends TestCase
 
         $this->assertDatabaseCount('email_runs', 1);
         $this->assertDatabaseCount('email_deliveries', 1);
+    }
+
+    public function test_the_send_time_is_in_the_congregations_time_zone(): void
+    {
+        Mail::fake();
+        [$team] = $this->owner();
+        $team->update(['timezone' => 'America/Los_Angeles']);
+        WeeklyEmailSetting::forTeam($team)->update([
+            'enabled' => true,
+            'send_day' => CarbonImmutable::parse('2026-11-01', 'America/Los_Angeles')->dayOfWeek,
+            'send_time' => '09:00',
+            'window_minutes' => 60,
+        ]);
+
+        // 9:05 in New York is 6:05 in Los Angeles: not yet.
+        $this->travelTo(CarbonImmutable::parse('2026-11-01 09:05', 'America/New_York'));
+        $this->artisan('weekly-email:dispatch-due')->assertSuccessful();
+        $this->assertDatabaseCount('email_runs', 0);
+
+        $this->travelTo(CarbonImmutable::parse('2026-11-01 09:05', 'America/Los_Angeles'));
+        $this->artisan('weekly-email:dispatch-due')->assertSuccessful();
+        $this->assertDatabaseCount('email_runs', 1);
     }
 
     public function test_unsubscribe_link_opts_a_recipient_out(): void
