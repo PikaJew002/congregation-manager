@@ -11,6 +11,8 @@ use GdImage;
  * Lays a song's text out inside the white border of its background. The first slide's title boxes all span the
  * border with right-aligned text, every other slide's lyrics are centred within it, and text is shrunk when it
  * would not fit. Text is also made explicitly white, as PowerPoint draws LibreOffice's automatic colour as black.
+ * Two more PowerPoint gaps are closed: text in LibreOffice's "ooxml-rect" shapes is moved into text frames, and each
+ * slide's own background is moved onto its master, the only background PowerPoint draws.
  */
 class SongSlideFormatter
 {
@@ -77,6 +79,11 @@ class SongSlideFormatter
         $this->styleIndex = $this->styleIndex($this->content, $this->styles);
         $this->clones = [];
         $pages = $this->pages($this->content);
+        $this->frameRectangles($pages);
+        $this->moveBackgroundsToMasters($pages, $files);
+        if (isset($pages[0])) {
+            $this->standardizeTitleFonts($this->textShapes($pages[0]));
+        }
         $size = $this->pageSize($this->styles);
         $area = $size !== null ? $this->textArea($files, $size) : null;
         $notes = [];
@@ -106,6 +113,294 @@ class SongSlideFormatter
         $this->writeZip($destination, $files);
 
         return $notes;
+    }
+
+    /**
+     * PowerPoint drops the text of the "ooxml-rect" custom shapes that LibreOffice's PPTX import leaves behind, so
+     * those holding text become text frames with the same position and style.
+     *
+     * @param  list<DOMElement>  $pages
+     */
+    private function frameRectangles(array $pages): void
+    {
+        foreach ($pages as $page) {
+            foreach (iterator_to_array($page->childNodes) as $shape) {
+                if (! $shape instanceof DOMElement || $shape->namespaceURI !== self::DRAW || $shape->localName !== 'custom-shape') {
+                    continue;
+                }
+                $geometry = $this->child($shape, self::DRAW, 'enhanced-geometry');
+                if ($geometry?->getAttributeNS(self::DRAW, 'type') !== 'ooxml-rect' || trim($shape->textContent) === '') {
+                    continue;
+                }
+
+                $frame = $this->content->createElementNS(self::DRAW, 'draw:frame');
+                foreach (iterator_to_array($shape->attributes) as $attribute) {
+                    $frame->setAttributeNS($attribute->namespaceURI, $attribute->nodeName, $attribute->value);
+                }
+                $textBox = $frame->appendChild($this->content->createElementNS(self::DRAW, 'draw:text-box'));
+                foreach (iterator_to_array($shape->childNodes) as $child) {
+                    if ($child === $geometry) {
+                        continue;
+                    }
+                    ($child instanceof DOMElement && $child->namespaceURI === self::TEXT ? $textBox : $frame)->appendChild($child);
+                }
+                $shape->parentNode->replaceChild($frame, $shape);
+            }
+        }
+    }
+
+    /**
+     * PowerPoint ignores a slide's own background and draws its master's, so slide backgrounds move to the master.
+     * Slides that share a master but not a background each get a copy of the master with their background. Fill images
+     * are compared by their bytes, as PPTX imports give every slide its own name for the same picture.
+     *
+     * @param  list<DOMElement>  $pages
+     * @param  array<string, string>  $files
+     */
+    private function moveBackgroundsToMasters(array $pages, array $files): void
+    {
+        $imageKeys = [];
+        foreach ([$this->styles, $this->content] as $dom) {
+            foreach ($dom->getElementsByTagNameNS(self::DRAW, 'fill-image') as $image) {
+                $href = $image->getAttributeNS(self::XLINK, 'href');
+                $imageKeys[$image->getAttributeNS(self::DRAW, 'name')] ??= isset($files[$href]) ? hash('sha256', $files[$href]) : $href;
+            }
+        }
+
+        $masters = [];
+        foreach ($this->styles->getElementsByTagNameNS(self::STYLE, 'master-page') as $master) {
+            $masters[$master->getAttributeNS(self::STYLE, 'name')] = $master;
+        }
+
+        $pagesPerMaster = [];
+        $variants = [];
+        $pageStyles = [];
+        foreach ($pages as $page) {
+            $masterName = $page->getAttributeNS(self::DRAW, 'master-page-name');
+            $pagesPerMaster[$masterName] = ($pagesPerMaster[$masterName] ?? 0) + 1;
+
+            $style = $this->namedStyle($this->content, $page->getAttributeNS(self::DRAW, 'style-name'));
+            $properties = $style ? $this->child($style, self::STYLE, 'drawing-page-properties') : null;
+            $background = $properties ? $this->backgroundAttributes($properties) : [];
+            if (! isset($masters[$masterName]) || ($background['draw:fill'][1] ?? 'none') === 'none') {
+                continue;
+            }
+
+            ksort($background);
+            $comparable = array_map(fn (array $attribute) => $attribute[1], $background);
+            if (isset($comparable['draw:fill-image-name'])) {
+                $comparable['draw:fill-image-name'] = $imageKeys[$comparable['draw:fill-image-name']] ?? $comparable['draw:fill-image-name'];
+            }
+            $key = json_encode($comparable);
+            $variants[$masterName][$key]['background'] = $background;
+            $variants[$masterName][$key]['pages'][] = $page;
+            $pageStyles[] = $properties;
+        }
+
+        foreach ($variants as $masterName => $backgrounds) {
+            $master = $masters[$masterName];
+            $wholeMaster = count($backgrounds) === 1 && count(reset($backgrounds)['pages']) === $pagesPerMaster[$masterName];
+
+            foreach (array_values($backgrounds) as $index => $variant) {
+                $target = $wholeMaster ? $master : $this->copyMaster($master, $masters, $masterName.'-background'.($index + 1));
+                $this->setMasterBackground($target, $variant['background']);
+                foreach ($variant['pages'] as $page) {
+                    $page->setAttributeNS(self::DRAW, 'draw:master-page-name', $target->getAttributeNS(self::STYLE, 'name'));
+                }
+            }
+        }
+
+        foreach ($pageStyles as $properties) {
+            foreach ($this->backgroundAttributes($properties) as [$namespace, $value, $local]) {
+                $properties->removeAttributeNS($namespace, $local);
+            }
+        }
+    }
+
+    /**
+     * The fill settings on a drawing-page style, keyed by qualified name.
+     *
+     * @return array<string, array{0: string, 1: string, 2: string}> namespace, value and local name
+     */
+    private function backgroundAttributes(DOMElement $properties): array
+    {
+        $background = [];
+        foreach (iterator_to_array($properties->attributes) as $attribute) {
+            $isBackground = match ($attribute->namespaceURI) {
+                self::DRAW => str_starts_with($attribute->localName, 'fill')
+                    || in_array($attribute->localName, ['background-size', 'opacity', 'opacity-name', 'gradient-step-count', 'tile-repeat-offset'], true),
+                self::STYLE => $attribute->localName === 'repeat',
+                default => false,
+            };
+            if ($isBackground) {
+                $background[$attribute->nodeName] = [$attribute->namespaceURI, $attribute->value, $attribute->localName];
+            }
+        }
+
+        return $background;
+    }
+
+    /**
+     * @param  array<string, DOMElement>  $masters
+     */
+    private function copyMaster(DOMElement $master, array &$masters, string $base): DOMElement
+    {
+        $name = $base;
+        for ($suffix = 2; isset($masters[$name]); $suffix++) {
+            $name = $base.'-'.$suffix;
+        }
+
+        $copy = $master->cloneNode(true);
+        $copy->setAttributeNS(self::STYLE, 'style:name', $name);
+        $copy->removeAttributeNS(self::STYLE, 'display-name');
+        $master->parentNode->insertBefore($copy, $master->nextSibling);
+        $masters[$name] = $copy;
+
+        return $copy;
+    }
+
+    /**
+     * Points the master at a copy of its drawing-page style that carries the background, bringing over any fill
+     * image or gradient that only content.xml defined.
+     *
+     * @param  array<string, array{0: string, 1: string, 2: string}>  $background
+     */
+    private function setMasterBackground(DOMElement $master, array $background): void
+    {
+        $oldName = $master->getAttributeNS(self::DRAW, 'style-name');
+        $old = $oldName !== '' ? $this->namedStyle($this->styles, $oldName) : null;
+        if ($old) {
+            $style = $old->cloneNode(true);
+        } else {
+            $style = $this->styles->createElementNS(self::STYLE, 'style:style');
+            $style->setAttributeNS(self::STYLE, 'style:family', 'drawing-page');
+        }
+
+        $base = ($oldName !== '' ? $oldName : 'Mdp').'-background';
+        $name = $base;
+        for ($suffix = 2; isset($this->styleIndex[$name]); $suffix++) {
+            $name = $base.'-'.$suffix;
+        }
+        $style->setAttributeNS(self::STYLE, 'style:name', $name);
+
+        $properties = $this->child($style, self::STYLE, 'drawing-page-properties')
+            ?? $style->appendChild($this->styles->createElementNS(self::STYLE, 'style:drawing-page-properties'));
+        foreach ($this->backgroundAttributes($properties) as [$namespace, $value, $local]) {
+            $properties->removeAttributeNS($namespace, $local);
+        }
+        foreach ($background as $qualified => [$namespace, $value]) {
+            $properties->setAttributeNS($namespace, $qualified, $value);
+            if (in_array($qualified, ['draw:fill-image-name', 'draw:fill-gradient-name', 'draw:fill-hatch-name', 'draw:opacity-name'], true)) {
+                $this->shareFillDefinition($value);
+            }
+        }
+
+        $this->section($this->styles, 'automatic-styles')->appendChild($style);
+        $this->styleIndex[$name] = [$style];
+        $master->setAttributeNS(self::DRAW, 'draw:style-name', $name);
+    }
+
+    private function shareFillDefinition(string $name): void
+    {
+        $find = function (DOMDocument $dom) use ($name): ?DOMElement {
+            foreach ($dom->getElementsByTagNameNS(self::DRAW, '*') as $element) {
+                if (in_array($element->localName, ['fill-image', 'gradient', 'hatch', 'opacity'], true)
+                    && $element->getAttributeNS(self::DRAW, 'name') === $name) {
+                    return $element;
+                }
+            }
+
+            return null;
+        };
+
+        if (! $find($this->styles) && ($definition = $find($this->content))) {
+            $this->section($this->styles, 'styles')->appendChild($this->styles->importNode($definition, true));
+        }
+    }
+
+    /**
+     * Gives the first slide's title and author lines the standard fonts. The author is the lowest text box and the
+     * title the highest one above it without Hebrew; a Hebrew title or a translation line keeps its own font. Titles
+     * still shrink later when they would not fit inside the border.
+     *
+     * @param  list<DOMElement>  $shapes
+     */
+    private function standardizeTitleFonts(array $shapes): void
+    {
+        $top = fn (DOMElement $shape) => $this->toCentimeters($shape->getAttributeNS(self::SVG, 'y')) ?? 0.0;
+        usort($shapes, fn (DOMElement $a, DOMElement $b) => $top($a) <=> $top($b));
+
+        $author = count($shapes) > 1 ? array_pop($shapes) : null;
+        $title = null;
+        foreach ($shapes as $shape) {
+            if (! preg_match('/\p{Hebrew}/u', $shape->textContent)) {
+                $title = $shape;
+                break;
+            }
+        }
+
+        if ($title) {
+            $this->setFont($title, 'title-font', 'Liberation Sans', 'swiss', 'variable', 30, 'bold', 'normal');
+        }
+        if ($author) {
+            $this->setFont($author, 'author-font', 'Liberation Mono', 'modern', 'fixed', 15, 'normal', 'italic');
+        }
+    }
+
+    private function setFont(DOMElement $shape, string $tag, string $family, string $generic, string $pitch, float $size, string $weight, string $style): void
+    {
+        $properties = ['text-properties' => [
+            'style:font-name' => $this->fontFace($family, $generic, $pitch),
+            'fo:font-family' => null,
+            'style:font-family-generic' => null,
+            'style:font-pitch' => null,
+            'style:font-charset' => null,
+            'style:font-style-name' => null,
+            'fo:font-size' => $size.'pt',
+            'style:font-size-asian' => $size.'pt',
+            'style:font-size-complex' => $size.'pt',
+            'fo:font-weight' => $weight,
+            'style:font-weight-asian' => $weight,
+            'style:font-weight-complex' => $weight,
+            'fo:font-style' => $style,
+            'style:font-style-asian' => $style,
+            'style:font-style-complex' => $style,
+        ]];
+
+        foreach ($this->paragraphs($shape) as $paragraph) {
+            $this->restyle($paragraph, self::TEXT, 'text:style-name', 'paragraph', $tag, $properties, $shape->getAttributeNS(self::DRAW, 'text-style-name'));
+        }
+        foreach (iterator_to_array($shape->getElementsByTagNameNS(self::TEXT, 'span')) as $span) {
+            $this->restyle($span, self::TEXT, 'text:style-name', 'text', $tag, $properties);
+        }
+    }
+
+    /**
+     * The name of content.xml's font face for the family, declaring one when there is none.
+     */
+    private function fontFace(string $family, string $generic, string $pitch): string
+    {
+        $declarations = $this->section($this->content, 'font-face-decls');
+        $names = [];
+        foreach ($declarations->getElementsByTagNameNS(self::STYLE, 'font-face') as $face) {
+            $name = $face->getAttributeNS(self::STYLE, 'name');
+            if (trim($face->getAttributeNS(self::SVG, 'font-family'), "'\"") === $family) {
+                return $name;
+            }
+            $names[$name] = true;
+        }
+
+        $name = $family;
+        for ($suffix = 2; isset($names[$name]); $suffix++) {
+            $name = $family.$suffix;
+        }
+        $face = $declarations->appendChild($this->content->createElementNS(self::STYLE, 'style:font-face'));
+        $face->setAttributeNS(self::STYLE, 'style:name', $name);
+        $face->setAttributeNS(self::SVG, 'svg:font-family', str_contains($family, ' ') ? "'{$family}'" : $family);
+        $face->setAttributeNS(self::STYLE, 'style:font-family-generic', $generic);
+        $face->setAttributeNS(self::STYLE, 'style:font-pitch', $pitch);
+
+        return $name;
     }
 
     /**

@@ -83,6 +83,174 @@ class SongSlideFormatterTest extends TestCase
         $this->assertSame([], $this->nonWhiteText($xpath, $styles));
     }
 
+    public function test_title_and_author_lines_get_the_standard_fonts(): void
+    {
+        $expected = [
+            'kumi-ori.odp' => ['Kumi Ori', 'Barry and Batya Segal'],
+            'trees-of-the-field.odp' => ['Trees of The Field', 'Stuart Dauermann'],
+            'blessed-be-your-name.odp' => ['Blessed Be Your Name', 'Matt Redman'],
+            'come-thou-fount.odp' => ['Come, Thou Fount of Every Blessing', 'Robert Robinson, 1758'],
+        ];
+
+        foreach ($expected as $fixture => [$title, $author]) {
+            $destination = storage_path('framework/testing/fonts-'.$fixture);
+            $this->assertSame([], (new SongSlideFormatter)->format($this->fixture($fixture), $destination), $fixture);
+            [$xpath, $styles] = $this->open($destination);
+
+            $this->assertSame(['Liberation Sans', '30pt', 'bold', 'normal'], $this->font($xpath, $styles, $title), $fixture);
+            $this->assertSame(['Liberation Mono', '15pt', 'normal', 'italic'], $this->font($xpath, $styles, $author), $fixture);
+            $this->assertReferencesResolve($destination);
+        }
+
+        [$xpath, $styles] = $this->open(storage_path('framework/testing/fonts-kumi-ori.odp'));
+        $this->assertSame('Waree', $this->font($xpath, $styles, 'קומי אורי')[0], 'The Hebrew title keeps its own font.');
+    }
+
+    /**
+     * Family, size, weight and style of the first-slide span with this text.
+     *
+     * @return array{0: string, 1: ?string, 2: ?string, 3: ?string}
+     */
+    private function font(DOMXPath $xpath, DOMXPath $styles, string $text): array
+    {
+        $span = $xpath->query("(//draw:page)[1]//text:span[normalize-space()='{$text}']")->item(0);
+        $this->assertInstanceOf(DOMElement::class, $span, "No first-slide span reads \"{$text}\".");
+
+        $face = $this->resolve($xpath, $styles, $span, 'text-properties', 'style:font-name');
+        $family = $xpath->evaluate("string(//style:font-face[@style:name='{$face}']/@svg:font-family)")
+            ?: $styles->evaluate("string(//style:font-face[@style:name='{$face}']/@svg:font-family)");
+
+        return [
+            trim($family, "'"),
+            $this->resolve($xpath, $styles, $span, 'text-properties', 'fo:font-size'),
+            $this->resolve($xpath, $styles, $span, 'text-properties', 'fo:font-weight'),
+            $this->resolve($xpath, $styles, $span, 'text-properties', 'fo:font-style'),
+        ];
+    }
+
+    /**
+     * Blessed Be Your Name came from a PPTX, and PowerPoint showed none of its text: it sat in "ooxml-rect" custom shapes.
+     */
+    public function test_text_in_ooxml_rectangles_moves_into_text_frames(): void
+    {
+        $source = $this->fixture('blessed-be-your-name.odp');
+        $destination = storage_path('framework/testing/formatted-blessed-be-your-name.odp');
+
+        (new SongSlideFormatter)->format($source, $destination);
+
+        [$before] = $this->open($source);
+        [$xpath, $styles] = $this->open($destination);
+        $this->assertGreaterThan(0, $before->query('//draw:page/draw:custom-shape[draw:enhanced-geometry/@draw:type="ooxml-rect"]')->length);
+        $this->assertSame(0, $xpath->query('//draw:page/draw:custom-shape')->length);
+
+        $text = fn (DOMXPath $document) => array_map(
+            fn (DOMElement $paragraph) => $paragraph->textContent,
+            iterator_to_array($document->query('//draw:page/*[not(self::presentation:notes)]//text:p')),
+        );
+        $this->assertSame($text($before), $text($xpath));
+
+        foreach ($this->shapes($xpath) as $shape) {
+            $this->assertSame('frame', $shape->localName);
+            $this->assertSame(1, $xpath->query('draw:text-box', $shape)->length);
+            $this->assertSame(0, $xpath->query('text:p', $shape)->length, 'Text must sit inside the text box.');
+        }
+        $this->assertSame([], $this->nonWhiteText($xpath, $styles));
+        $this->assertReferencesResolve($destination);
+    }
+
+    /**
+     * Come, Thou Fount came from a PPTX with a white master and the background on every slide. PowerPoint draws only the
+     * master's background, so its white text was invisible.
+     */
+    public function test_slide_backgrounds_move_onto_their_master(): void
+    {
+        $destination = storage_path('framework/testing/formatted-come-thou-fount.odp');
+
+        (new SongSlideFormatter)->format($this->fixture('come-thou-fount.odp'), $destination);
+
+        [$xpath, $styles] = $this->open($destination);
+        $this->assertSame([], $this->slideFills($xpath));
+        $masters = array_unique(array_map(fn ($name) => $name->value, iterator_to_array($xpath->query('//draw:page/@draw:master-page-name'))));
+        $this->assertCount(1, $masters, 'Slides sharing one picture should share one master.');
+        $this->assertSame('bitmap', $this->masterFill($styles, reset($masters))['draw:fill']);
+        $this->assertFillImageIsPackaged($destination, $this->masterFill($styles, reset($masters))['draw:fill-image-name']);
+        $this->assertReferencesResolve($destination);
+    }
+
+    public function test_slides_with_different_backgrounds_get_their_own_master(): void
+    {
+        $source = $this->edited('come-thou-fount.odp', fn (string $content) => preg_replace(
+            '/(<style:style style:name="i8_dp4" style:family="drawing-page"><style:drawing-page-properties [^>]*?)draw:fill="bitmap" draw:fill-image-name="[^"]*"/',
+            '$1draw:fill="solid" draw:fill-color="#000000"',
+            $content,
+            1,
+        ));
+        $destination = storage_path('framework/testing/formatted-two-backgrounds.odp');
+
+        (new SongSlideFormatter)->format($source, $destination);
+
+        [$xpath, $styles] = $this->open($destination);
+        $this->assertSame([], $this->slideFills($xpath));
+        $pages = $xpath->query('//draw:page');
+        $solid = $pages->item(2)->getAttribute('draw:master-page-name');
+        $this->assertSame('#000000', $this->masterFill($styles, $solid)['draw:fill-color']);
+        foreach ($pages as $index => $page) {
+            if ($index !== 2) {
+                $this->assertNotSame($solid, $page->getAttribute('draw:master-page-name'));
+                $this->assertSame('bitmap', $this->masterFill($styles, $page->getAttribute('draw:master-page-name'))['draw:fill']);
+            }
+        }
+        $this->assertReferencesResolve($destination);
+    }
+
+    /**
+     * Fill settings left on the slides' own drawing-page styles.
+     *
+     * @return list<string>
+     */
+    private function slideFills(DOMXPath $xpath): array
+    {
+        $fills = [];
+        foreach ($xpath->query('//draw:page/@draw:style-name') as $name) {
+            $fill = $xpath->evaluate("string(//style:style[@style:name='{$name->value}']/style:drawing-page-properties/@draw:fill)");
+            if ($fill !== '' && $fill !== 'none') {
+                $fills[] = $name->value.': '.$fill;
+            }
+        }
+
+        return $fills;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function masterFill(DOMXPath $styles, string $master): array
+    {
+        $style = $styles->evaluate("string(//style:master-page[@style:name='{$master}']/@draw:style-name)");
+        $properties = $styles->query("//style:style[@style:name='{$style}']/style:drawing-page-properties")->item(0);
+        $this->assertInstanceOf(DOMElement::class, $properties, "Master {$master} has no drawing-page style.");
+
+        $fill = [];
+        foreach ($properties->attributes as $attribute) {
+            $fill[$attribute->nodeName] = $attribute->value;
+        }
+
+        return $fill;
+    }
+
+    private function assertFillImageIsPackaged(string $path, string $name): void
+    {
+        [, $styles] = $this->open($path);
+        $styles->registerNamespace('xlink', 'http://www.w3.org/1999/xlink');
+        $href = $styles->evaluate("string(//draw:fill-image[@draw:name='{$name}']/@xlink:href)");
+        $this->assertNotSame('', $href, "Fill image {$name} is not defined in styles.xml.");
+
+        $zip = new ZipArchive;
+        $zip->open($path);
+        $this->assertNotFalse($zip->getFromName($href), "{$href} is missing from the package.");
+        $zip->close();
+    }
+
     private function assertInsideBorder(DOMElement $shape, string $fixture): void
     {
         $box = $this->box($shape);
