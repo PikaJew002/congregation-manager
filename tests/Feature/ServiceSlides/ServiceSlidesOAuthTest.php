@@ -109,7 +109,7 @@ class ServiceSlidesOAuthTest extends TestCase
         $consent->assertOk();
         $consent->assertSee('Beth Shalom');
         $consent->assertSee('claude.ai');
-        $consent->assertSee('Plan service slides for one congregation');
+        $consent->assertSee('Use Congregation Manager tools for one congregation');
 
         preg_match('/name="auth_token" value="([^"]+)"/', $consent->getContent(), $matches);
         $this->assertNotEmpty($matches[1] ?? null);

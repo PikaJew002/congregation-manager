@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Modules\ZoomRecordings\Actions\DeleteRecording;
 use App\Modules\ZoomRecordings\Actions\DispatchRecordingPipeline;
-use App\Modules\ZoomRecordings\Jobs\UpdateManifest;
+use App\Modules\ZoomRecordings\Actions\UpdateRecording;
 use App\Modules\ZoomRecordings\Models\ZoomRecording;
 use App\Modules\ZoomRecordings\Models\ZoomRecordingSetting;
 use Illuminate\Http\RedirectResponse;
@@ -26,7 +26,7 @@ class ZoomRecordingController extends Controller
         ]);
     }
 
-    public function update(Request $request, Team $current_team, ZoomRecording $recording): RedirectResponse
+    public function update(Request $request, Team $current_team, ZoomRecording $recording, UpdateRecording $updater): RedirectResponse
     {
         abort_unless($recording->team_id === $current_team->id, 404);
         $data = $request->validate([
@@ -36,17 +36,8 @@ class ZoomRecordingController extends Controller
             'torah_portion' => ['nullable', 'string', 'max:255'],
             'archived' => ['required', 'boolean'],
         ]);
-        $archived = (bool) $data['archived'];
-        unset($data['archived']);
-
-        // The server stamps the time. Archiving an already archived recording
-        // keeps its original date.
-        $data['archived_at'] = $archived ? ($recording->archived_at ?? now()) : null;
-        $recording->update($data);
-
-        if (filled($recording->hls_path)) {
-            UpdateManifest::dispatchSync($recording->id);
-        }
+        $data['archived'] = (bool) $data['archived'];
+        $updater->handle($recording, $data);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Recording updated.')]);
 

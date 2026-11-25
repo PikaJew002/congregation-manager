@@ -2,8 +2,9 @@
 
 namespace App\Modules\ServiceSlides\Mcp\Tools;
 
+use App\Mcp\CongregationContext;
+use App\Mcp\ModuleTool;
 use App\Modules\ServiceSlides\Jobs\GenerateServiceDeck;
-use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use App\Modules\ServiceSlides\Models\Service;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -12,6 +13,8 @@ use Laravel\Mcp\Server\Tool;
 
 class GenerateDeck extends Tool
 {
+    use ModuleTool;
+
     protected string $description = 'Queue a merged deck for one service date. It is an ODP or PPTX file, matching the deck\'s template.';
 
     public function __construct(private CongregationContext $context) {}
@@ -24,9 +27,14 @@ class GenerateDeck extends Tool
         ];
     }
 
+    protected function module(): string
+    {
+        return 'service-slides';
+    }
+
     public function handle(Request $request): Response
     {
-        $team = $this->context->resolve($request);
+        $team = $this->context->resolve($request, 'service-slides');
         if ($team instanceof Response) {
             return $team;
         }

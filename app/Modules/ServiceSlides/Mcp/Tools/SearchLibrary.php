@@ -2,7 +2,8 @@
 
 namespace App\Modules\ServiceSlides\Mcp\Tools;
 
-use App\Modules\ServiceSlides\Mcp\CongregationContext;
+use App\Mcp\CongregationContext;
+use App\Mcp\ModuleTool;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -11,6 +12,8 @@ use Laravel\Mcp\Server\Tool;
 
 class SearchLibrary extends Tool
 {
+    use ModuleTool;
+
     private const PAGE_SIZE = 25;
 
     protected string $description = 'Search the congregation slide library by title or alias. Each page has at most 25 matches. When the response includes nextCursor, call again with that value as cursor and the same query and kind.';
@@ -26,9 +29,14 @@ class SearchLibrary extends Tool
         ];
     }
 
+    protected function module(): string
+    {
+        return 'service-slides';
+    }
+
     public function handle(Request $request): Response
     {
-        $team = $this->context->resolve($request);
+        $team = $this->context->resolve($request, 'service-slides');
         if ($team instanceof Response) {
             return $team;
         }

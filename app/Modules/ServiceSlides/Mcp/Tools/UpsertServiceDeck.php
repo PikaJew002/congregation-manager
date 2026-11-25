@@ -2,8 +2,9 @@
 
 namespace App\Modules\ServiceSlides\Mcp\Tools;
 
+use App\Mcp\CongregationContext;
+use App\Mcp\ModuleTool;
 use App\Modules\ServiceSlides\Actions\ServicePlanner;
-use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use InvalidArgumentException;
 use Laravel\Mcp\Request;
@@ -12,6 +13,8 @@ use Laravel\Mcp\Server\Tool;
 
 class UpsertServiceDeck extends Tool
 {
+    use ModuleTool;
+
     protected string $description = 'Create a deck for a date from its template preset, then fill slots with library titles. Send `slots` ({slot_key: [titles]}) to fill named slots, or `titles` when the template has exactly one repeating slot. Only the slots you send are replaced. Returns unmatched titles per slot.';
 
     public function __construct(private CongregationContext $context, private ServicePlanner $planner) {}
@@ -26,9 +29,14 @@ class UpsertServiceDeck extends Tool
         ];
     }
 
+    protected function module(): string
+    {
+        return 'service-slides';
+    }
+
     public function handle(Request $request): Response
     {
-        $team = $this->context->resolve($request);
+        $team = $this->context->resolve($request, 'service-slides');
         if ($team instanceof Response) {
             return $team;
         }

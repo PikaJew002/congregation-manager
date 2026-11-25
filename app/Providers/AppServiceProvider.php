@@ -3,11 +3,12 @@
 namespace App\Providers;
 
 use App\Mail\Transport\MailChannelsTransport;
+use App\Mcp\AssignMcpCongregation;
+use App\Mcp\CongregationContext;
 use App\Models\Passport\AuthCode;
 use App\Models\Passport\Token;
 use App\Models\Team;
 use App\Models\User;
-use App\Modules\ServiceSlides\Http\Middleware\AssignSlideCongregation;
 use App\Modules\ServiceSlides\Http\Middleware\EnsureOauthUserIsVerified;
 use App\Support\Modules\ModuleAccess;
 use App\Support\Modules\ModuleRegistry;
@@ -96,7 +97,7 @@ class AppServiceProvider extends ServiceProvider
     protected function configurePassport(): void
     {
         Passport::tokensCan([
-            'mcp:use' => 'Plan service slides for one congregation',
+            'mcp:use' => 'Use Congregation Manager tools for one congregation',
         ]);
         Passport::tokensExpireIn(CarbonInterval::days(15));
         Passport::refreshTokensExpireIn(CarbonInterval::days(180));
@@ -106,7 +107,7 @@ class AppServiceProvider extends ServiceProvider
             $user = $parameters['user'];
             $teams = $user instanceof User
                 ? $user->teams()->orderBy('name')->get()->filter(
-                    fn (Team $team): bool => app(ModuleAccess::class)->canUse($user, $team, 'service-slides'),
+                    fn (Team $team): bool => app(CongregationContext::class)->canConnect($user, $team),
                 )->values()
                 : collect();
 
@@ -119,7 +120,7 @@ class AppServiceProvider extends ServiceProvider
         Route::getRoutes()->getByName('passport.authorizations.authorize')
             ?->middleware(EnsureOauthUserIsVerified::class);
         Route::getRoutes()->getByName('passport.authorizations.approve')
-            ?->middleware([EnsureOauthUserIsVerified::class, AssignSlideCongregation::class]);
+            ?->middleware([EnsureOauthUserIsVerified::class, AssignMcpCongregation::class]);
         Route::getRoutes()->getByName('passport.authorizations.deny')
             ?->middleware(EnsureOauthUserIsVerified::class);
     }

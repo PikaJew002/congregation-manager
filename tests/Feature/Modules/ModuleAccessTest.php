@@ -43,6 +43,16 @@ class ModuleAccessTest extends TestCase
             }
 
             public function schedule(Schedule $schedule): void {}
+
+            public function mcpTools(): array
+            {
+                return [];
+            }
+
+            public function mcpInstructions(): string
+            {
+                return '';
+            }
         });
     }
 

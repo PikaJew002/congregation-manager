@@ -39,7 +39,7 @@ class AccessController extends Controller
         return Inertia::render('service-slides/Settings', [
             'tokens' => $tokens,
             'connections' => $connections,
-            'mcpUrl' => url('/mcp/services'),
+            'mcpUrl' => url('/mcp'),
         ]);
     }
 
@@ -47,7 +47,7 @@ class AccessController extends Controller
     {
         $data = $request->validate(['name' => ['required', 'string', 'max:255']]);
         $token = $request->user()->createToken($data['name'], [
-            'service-slides',
+            'mcp',
             'congregation:'.$current_team->id,
         ]);
 

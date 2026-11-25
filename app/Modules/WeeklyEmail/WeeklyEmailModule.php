@@ -36,4 +36,14 @@ class WeeklyEmailModule implements ModuleDefinition
     {
         $schedule->command('weekly-email:dispatch-due')->everyMinute()->withoutOverlapping();
     }
+
+    public function mcpTools(): array
+    {
+        return [];
+    }
+
+    public function mcpInstructions(): string
+    {
+        return '';
+    }
 }

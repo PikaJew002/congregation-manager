@@ -2,8 +2,9 @@
 
 namespace App\Modules\ServiceSlides\Mcp\Tools;
 
+use App\Mcp\CongregationContext;
+use App\Mcp\ModuleTool;
 use App\Modules\ServiceSlides\Actions\SlideFiles;
-use App\Modules\ServiceSlides\Mcp\CongregationContext;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
 use App\Modules\ServiceSlides\Support\EncodedUpload;
 use App\Modules\ServiceSlides\Support\PresetSteps;
@@ -21,6 +22,8 @@ use Laravel\Mcp\Server\Tool;
 
 class CreateTemplate extends Tool
 {
+    use ModuleTool;
+
     protected string $description = 'Create a slide template from an ODP or PPTX file. Songs must be ODP; liturgy must be PPTX. Send the file as base64, or send a Dropbox or Google Drive share/view/edit link (Drive file links from the Google Drive MCP are accepted). Optional steps replace the suggested preset, which is the structural slides around one repeating slot. A slide step is {"type":"slide","label":"Congregational Prayer"}. A slot step is {"type":"slot","key":"opening","label":"Opening","kind":"liturgy","repeat":false,"defaults":["Psalm 19"]}. Liturgy slots are repeat false. The music songs slot is repeat true. A saved preset applies to decks created afterward.';
 
     public function __construct(
@@ -52,9 +55,14 @@ class CreateTemplate extends Tool
         ];
     }
 
+    protected function module(): string
+    {
+        return 'service-slides';
+    }
+
     public function handle(Request $request): Response
     {
-        $team = $this->context->resolve($request);
+        $team = $this->context->resolve($request, 'service-slides');
         if ($team instanceof Response) {
             return $team;
         }

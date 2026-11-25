@@ -3,6 +3,7 @@
 namespace App\Support\Modules;
 
 use Illuminate\Console\Scheduling\Schedule;
+use Laravel\Mcp\Server\Tool;
 
 interface ModuleDefinition
 {
@@ -23,4 +24,16 @@ interface ModuleDefinition
     public function navItems(): array;
 
     public function schedule(Schedule $schedule): void;
+
+    /**
+     * Tools this module adds to the congregation MCP server.
+     *
+     * @return list<class-string<Tool>>
+     */
+    public function mcpTools(): array;
+
+    /**
+     * How to use this module's tools, added to the server instructions.
+     */
+    public function mcpInstructions(): string;
 }

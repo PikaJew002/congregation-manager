@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\ServiceSlides\Http\Middleware;
+namespace App\Mcp;
 
 use Closure;
 use Illuminate\Http\Request;
@@ -19,8 +19,8 @@ class AuthenticateMcp
 
         if (is_string($bearer) && substr_count($bearer, '.') === 2 && Auth::guard('api')->check()) {
             Auth::shouldUse('api');
-            $request->attributes->set('service_slides.oauth', true);
-            $request->attributes->set('service_slides.oauth_team_id', $this->teamId($bearer));
+            $request->attributes->set('mcp.oauth', true);
+            $request->attributes->set('mcp.oauth_team_id', $this->teamId($bearer));
 
             return $next($request);
         }
