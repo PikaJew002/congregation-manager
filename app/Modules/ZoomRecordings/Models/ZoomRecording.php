@@ -3,6 +3,7 @@
 namespace App\Modules\ZoomRecordings\Models;
 
 use App\Models\Concerns\BelongsToTeam;
+use App\Support\HebrewCalendar;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 
@@ -65,7 +66,7 @@ class ZoomRecording extends Model
         return $this->archived_at !== null;
     }
 
-    public const DEFAULT_SERVICE = 'Shabbat Morning Service';
+    public const DEFAULT_SERVICE = HebrewCalendar::DEFAULT_SERVICE;
 
     /**
      * The recording's date where the congregation meets. Zoom reports UTC, so

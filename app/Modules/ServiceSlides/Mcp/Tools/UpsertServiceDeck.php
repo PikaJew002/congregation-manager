@@ -5,6 +5,7 @@ namespace App\Modules\ServiceSlides\Mcp\Tools;
 use App\Mcp\CongregationContext;
 use App\Mcp\ModuleTool;
 use App\Modules\ServiceSlides\Actions\ServicePlanner;
+use App\Support\HebrewCalendar;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use InvalidArgumentException;
 use Laravel\Mcp\Request;
@@ -26,6 +27,7 @@ class UpsertServiceDeck extends Tool
             'template' => $schema->string()->description('Template name or default kind, such as Music or song.')->required(),
             'titles' => $schema->array()->items($schema->string())->description('Short form: library titles in order, for a template with one repeating slot.'),
             'slots' => $schema->object()->description('Titles per slot key from list_templates, for example {"songs": ["Kumi Ori"], "opening": ["Psalm 19"]}.'),
+            'service_title' => $schema->string()->description('Name of the service, without the date. Leave it out for the usual name: a new service is called "'.HebrewCalendar::DEFAULT_SERVICE.'", or the holiday service when the date is a major holiday, such as "Erev Rosh Hashana Service". When given, it also renames an existing service.'),
         ];
     }
 
@@ -49,18 +51,20 @@ class UpsertServiceDeck extends Tool
             'slots' => ['required_without:titles', 'array'],
             'slots.*' => ['array'],
             'slots.*.*' => ['string'],
+            'service_title' => ['nullable', 'string', 'max:255'],
         ]);
 
         try {
             $result = isset($data['slots'])
-                ? $this->planner->upsert($team, $data['date'], $data['template'], slots: $data['slots'], source: 'mcp')
-                : $this->planner->upsert($team, $data['date'], $data['template'], titles: $data['titles'], source: 'mcp');
+                ? $this->planner->upsert($team, $data['date'], $data['template'], slots: $data['slots'], source: 'mcp', serviceTitle: $data['service_title'] ?? null)
+                : $this->planner->upsert($team, $data['date'], $data['template'], titles: $data['titles'], source: 'mcp', serviceTitle: $data['service_title'] ?? null);
         } catch (InvalidArgumentException $exception) {
             return Response::error($exception->getMessage());
         }
 
         return Response::json([
             'date' => $result['service']->service_date->toDateString(),
+            'service_title' => $result['service']->title,
             'deck' => $result['deck']->name,
             'unmatched' => (object) $result['unmatched'],
             'notes' => $result['notes'],

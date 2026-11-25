@@ -121,7 +121,15 @@ const onImportSuccess = () => {
                 </div>
                 <div class="grid gap-2">
                     <Label for="title">Title (optional)</Label>
-                    <Input id="title" name="title" />
+                    <Input
+                        id="title"
+                        name="title"
+                        placeholder="Shabbat Morning Service"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Leave blank for Shabbat Morning Service, or the holiday
+                        service when the date is a major holiday.
+                    </p>
                 </div>
             </div>
             <div v-if="templates.length" class="space-y-2">
