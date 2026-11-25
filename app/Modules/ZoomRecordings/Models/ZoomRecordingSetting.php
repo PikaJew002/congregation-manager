@@ -16,6 +16,7 @@ class ZoomRecordingSetting extends Model
         'r2_prefix',
         'public_base_url',
         'preferred_recording_type',
+        'timezone',
     ];
 
     protected function casts(): array

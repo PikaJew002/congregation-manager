@@ -3,6 +3,7 @@
 namespace App\Modules\ZoomRecordings\Models;
 
 use App\Models\Concerns\BelongsToTeam;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 
 class ZoomRecording extends Model
@@ -14,6 +15,10 @@ class ZoomRecording extends Model
         'meeting_uuid',
         'meeting_id',
         'title',
+        'service',
+        'speaker',
+        'torah_portion',
+        'hebcal',
         'recorded_at',
         'duration_minutes',
         'download_url',
@@ -33,6 +38,7 @@ class ZoomRecording extends Model
     protected $hidden = [
         'download_url',
         'download_token',
+        'hebcal',
     ];
 
     protected function casts(): array
@@ -42,6 +48,7 @@ class ZoomRecording extends Model
             'download_token' => 'encrypted',
             'hidden' => 'boolean',
             'log' => 'array',
+            'hebcal' => 'array',
         ];
     }
 
@@ -50,6 +57,36 @@ class ZoomRecording extends Model
         $log = $this->log ?? [];
         $log[] = ['at' => now()->toIso8601String(), 'message' => $message];
         $this->update(['log' => $log]);
+    }
+
+    public const DEFAULT_SERVICE = 'Shabbat Morning Service';
+
+    /**
+     * The recording's date where the congregation meets. Zoom reports UTC, so
+     * an evening service in the Americas would otherwise land on the next day.
+     */
+    public function localDate(): ?CarbonImmutable
+    {
+        if ($this->recorded_at === null) {
+            return null;
+        }
+
+        $timezone = ZoomRecordingSetting::forTeam($this->team)->timezone ?: 'America/New_York';
+
+        return CarbonImmutable::parse($this->recorded_at)->setTimezone($timezone);
+    }
+
+    public function serviceLabel(): string
+    {
+        return filled($this->service) ? (string) $this->service : self::DEFAULT_SERVICE;
+    }
+
+    /** "Shabbat Morning Service - Nov 21, 2026"; the date is always appended. */
+    public function serviceTitle(): string
+    {
+        $date = $this->localDate();
+
+        return $this->serviceLabel().($date ? ' - '.$date->format('M j, Y') : '');
     }
 
     public function directory(): string

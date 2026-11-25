@@ -32,13 +32,22 @@ class UpdateManifest implements ShouldQueue
             $items->prepend([
                 'id' => $recording->id,
                 'title' => $recording->title,
-                'date' => optional($recording->recorded_at)->toDateString(),
+                'date' => $recording->localDate()?->toDateString(),
+                'service' => $recording->serviceLabel(),
+                'service_title' => $recording->serviceTitle(),
+                'speaker' => $recording->speaker ?: null,
+                'torah_portion' => $recording->torah_portion ?: null,
                 'duration' => $recording->duration_minutes,
                 'hls' => $base.'/'.$recording->hls_path,
                 'mp4' => $base.'/'.$recording->directory().'/source.mp4',
                 'poster' => $base.'/'.$recording->directory().'/poster.jpg',
             ]);
         }
+
+        // Newest recording date first, so editing an older recording does not
+        // move it to the top. Same date: the later recording (higher id) first.
+        // Undated entries go last.
+        $items = $items->sort(fn (array $a, array $b) => [$b['date'] ?? '', $b['id'] ?? 0] <=> [$a['date'] ?? '', $a['id'] ?? 0])->values();
 
         $disk->put($path, json_encode(['recordings' => $items->all()], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), [
             'ContentType' => 'application/json',

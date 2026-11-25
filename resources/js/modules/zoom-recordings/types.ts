@@ -23,6 +23,9 @@ export type ZoomRecording = {
     id: number;
     meeting_id: string | null;
     title: string;
+    service: string | null;
+    speaker: string | null;
+    torah_portion: string | null;
     recorded_at: string | null;
     duration_minutes: number | null;
     status: RecordingStatus;
@@ -38,6 +41,7 @@ export type ZoomRecordingSettings = {
     r2_prefix: string;
     public_base_url: string | null;
     preferred_recording_type: string;
+    timezone: string;
     has_webhook_secret: boolean;
     webhook_url: string;
 };

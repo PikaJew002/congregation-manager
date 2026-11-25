@@ -20,6 +20,8 @@ class ZoomRecordingController extends Controller
         return Inertia::render('zoom-recordings/Index', [
             'recordings' => ZoomRecording::query()->forTeam($current_team)->latest()->limit(100)->get(),
             'publicBaseUrl' => ZoomRecordingSetting::forTeam($current_team)->public_base_url,
+            'timezone' => ZoomRecordingSetting::forTeam($current_team)->timezone,
+            'defaultService' => ZoomRecording::DEFAULT_SERVICE,
         ]);
     }
 
@@ -28,6 +30,9 @@ class ZoomRecordingController extends Controller
         abort_unless($recording->team_id === $current_team->id, 404);
         $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
+            'service' => ['nullable', 'string', 'max:255'],
+            'speaker' => ['nullable', 'string', 'max:255'],
+            'torah_portion' => ['nullable', 'string', 'max:255'],
             'hidden' => ['required', 'boolean'],
         ]);
         $recording->update($data);
@@ -62,6 +67,7 @@ class ZoomRecordingController extends Controller
                 'r2_prefix' => $settings->r2_prefix,
                 'public_base_url' => $settings->public_base_url,
                 'preferred_recording_type' => $settings->preferred_recording_type,
+                'timezone' => $settings->timezone,
                 'has_webhook_secret' => filled($settings->webhook_secret),
                 'webhook_url' => route('zoom-recordings.webhook', $current_team->uuid),
             ],
@@ -76,6 +82,7 @@ class ZoomRecordingController extends Controller
             'r2_prefix' => ['required', 'string', 'max:255'],
             'public_base_url' => ['nullable', 'url'],
             'preferred_recording_type' => ['required', 'string', 'max:255'],
+            'timezone' => ['sometimes', 'required', 'timezone'],
         ]);
 
         $settings = ZoomRecordingSetting::forTeam($current_team);

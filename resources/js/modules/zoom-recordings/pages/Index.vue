@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { formatDateTime } from '@/lib/format';
 import { index, retry, settings, update } from '@/routes/zoom-recordings';
 import type { Team } from '@/types';
@@ -15,6 +16,8 @@ import type { RecordingStatus, RecordingStep, ZoomRecording } from '../types';
 const props = defineProps<{
     recordings: ZoomRecording[];
     publicBaseUrl: string | null;
+    timezone: string;
+    defaultService: string;
 }>();
 
 defineOptions({
@@ -64,7 +67,34 @@ const processingStatuses: RecordingStatus[] = [
 
 let teamSlug = computed(() => page.props.currentTeam?.slug ?? '');
 let editingId = ref<number | null>(null);
-let editTitle = ref('');
+let editForm = ref({ title: '', service: '', speaker: '', torah_portion: '' });
+
+/** "Nov 21, 2026" in the congregation's time zone, as on the website. */
+const serviceDate = (recording: ZoomRecording) =>
+    recording.recorded_at
+        ? new Intl.DateTimeFormat('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              timeZone: props.timezone,
+          }).format(new Date(recording.recorded_at))
+        : '';
+
+const serviceTitle = (recording: ZoomRecording, label?: string | null) => {
+    const date = serviceDate(recording);
+    const name = label?.trim() || props.defaultService;
+
+    return date ? `${name} - ${date}` : name;
+};
+
+const details = (recording: ZoomRecording) =>
+    [
+        serviceTitle(recording, recording.service),
+        recording.speaker,
+        recording.torah_portion,
+    ]
+        .filter(Boolean)
+        .join(' · ');
 
 let anyProcessing = computed(() =>
     props.recordings.some((r) => processingStatuses.includes(r.status)),
@@ -115,13 +145,30 @@ const playlistUrl = (recording: ZoomRecording) =>
 
 const startEditing = (recording: ZoomRecording) => {
     editingId.value = recording.id;
-    editTitle.value = recording.title;
+    editForm.value = {
+        title: recording.title,
+        service: recording.service ?? props.defaultService,
+        speaker: recording.speaker ?? '',
+        torah_portion: recording.torah_portion ?? '',
+    };
 };
 
 const save = (recording: ZoomRecording, changes: Partial<ZoomRecording>) => {
     router.visit(update([teamSlug.value, recording.id]), {
         data: {
             title: changes.title ?? recording.title,
+            service:
+                changes.service !== undefined
+                    ? changes.service
+                    : recording.service,
+            speaker:
+                changes.speaker !== undefined
+                    ? changes.speaker
+                    : recording.speaker,
+            torah_portion:
+                changes.torah_portion !== undefined
+                    ? changes.torah_portion
+                    : recording.torah_portion,
             hidden: changes.hidden ?? recording.hidden,
         },
         preserveScroll: true,
@@ -174,21 +221,69 @@ const retryRecording = (recording: ZoomRecording) => {
                     <div class="min-w-0 flex-1 space-y-1">
                         <form
                             v-if="editingId === recording.id"
-                            class="flex max-w-xl gap-2"
-                            @submit.prevent="
-                                save(recording, { title: editTitle })
-                            "
+                            class="grid max-w-xl gap-3"
+                            @submit.prevent="save(recording, { ...editForm })"
                         >
-                            <Input v-model="editTitle" v-focus required />
-                            <Button type="submit" size="sm">Save</Button>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                @click="editingId = null"
-                            >
-                                Cancel
-                            </Button>
+                            <div class="grid gap-1.5">
+                                <Label :for="`title-${recording.id}`">
+                                    Title
+                                </Label>
+                                <Input
+                                    :id="`title-${recording.id}`"
+                                    v-model="editForm.title"
+                                    v-focus
+                                    required
+                                />
+                            </div>
+                            <div class="grid gap-1.5">
+                                <Label :for="`service-${recording.id}`">
+                                    Service
+                                </Label>
+                                <div class="flex items-center gap-2">
+                                    <Input
+                                        :id="`service-${recording.id}`"
+                                        v-model="editForm.service"
+                                        :placeholder="defaultService"
+                                    />
+                                    <span
+                                        v-if="serviceDate(recording)"
+                                        class="text-sm whitespace-nowrap text-muted-foreground"
+                                    >
+                                        - {{ serviceDate(recording) }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div class="grid gap-1.5">
+                                    <Label :for="`speaker-${recording.id}`">
+                                        Speaker
+                                    </Label>
+                                    <Input
+                                        :id="`speaker-${recording.id}`"
+                                        v-model="editForm.speaker"
+                                    />
+                                </div>
+                                <div class="grid gap-1.5">
+                                    <Label :for="`portion-${recording.id}`">
+                                        Torah portion
+                                    </Label>
+                                    <Input
+                                        :id="`portion-${recording.id}`"
+                                        v-model="editForm.torah_portion"
+                                    />
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <Button type="submit" size="sm">Save</Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="editingId = null"
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
                         </form>
                         <div v-else class="flex items-center gap-2">
                             <h3 class="truncate font-medium">
@@ -197,7 +292,7 @@ const retryRecording = (recording: ZoomRecording) => {
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                :aria-label="`Rename ${recording.title}`"
+                                :aria-label="`Edit ${recording.title}`"
                                 @click="startEditing(recording)"
                             >
                                 <Pencil class="h-3.5 w-3.5" />
@@ -208,6 +303,9 @@ const retryRecording = (recording: ZoomRecording) => {
                                 aria-label="Hidden from website"
                             />
                         </div>
+                        <p v-if="editingId !== recording.id" class="text-sm">
+                            {{ details(recording) }}
+                        </p>
                         <p class="text-sm text-muted-foreground">
                             {{ formatDateTime(recording.recorded_at) }}
                             <template v-if="recording.duration_minutes">
