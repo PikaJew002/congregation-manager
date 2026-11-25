@@ -40,6 +40,11 @@ class UpdateManifest implements ShouldQueue
             ]);
         }
 
+        // Newest recording date first, so editing an older recording does not
+        // move it to the top. Same date: the later recording (higher id) first.
+        // Undated entries go last.
+        $items = $items->sort(fn (array $a, array $b) => [$b['date'] ?? '', $b['id'] ?? 0] <=> [$a['date'] ?? '', $a['id'] ?? 0])->values();
+
         $disk->put($path, json_encode(['recordings' => $items->all()], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), [
             'ContentType' => 'application/json',
             'CacheControl' => 'public, max-age=60',
