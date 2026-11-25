@@ -12,6 +12,7 @@ export type RecordingStatus =
 export type RecordingStep =
     | 'download'
     | 'transcode'
+    | 'rendition:360p'
     | 'rendition:480p'
     | 'rendition:720p'
     | 'rendition:1080p'

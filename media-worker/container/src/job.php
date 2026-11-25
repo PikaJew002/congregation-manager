@@ -6,7 +6,7 @@
  *   download   Zoom MP4 -> private files bucket (multipart) and public bucket.
  *              Re-uses the private copy when it already exists, so a retry does
  *              not need a live Zoom token.
- *   rendition  private MP4 -> one HLS rendition (480p, 720p, or 1080p) -> public.
+ *   rendition  private MP4 -> one HLS rendition (360p, 480p, 720p, or 1080p) -> public.
  *   poster     private MP4 -> poster.jpg -> public.
  *
  * Usage: php job.php <job.json> <result.json>
@@ -74,7 +74,7 @@ function run(array $job, string $work): array
 
         case 'rendition':
             $label = (string) ($job['rendition'] ?? '');
-            if (! in_array($label, ['480p', '720p', '1080p'], true)) {
+            if (! in_array($label, ['360p', '480p', '720p', '1080p'], true)) {
                 throw new RuntimeException('Unknown rendition: '.$label);
             }
             $s3->getObject(['Bucket' => $private, 'Key' => $sourceKey, 'SaveAs' => $source]);

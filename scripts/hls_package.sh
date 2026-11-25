@@ -3,7 +3,7 @@ set -euo pipefail
 
 INPUT="${1:?input mp4}"
 WORKDIR="${2:?output directory}"
-# Optional third argument runs one piece only: 480p, 720p, 1080p, or poster.
+# Optional third argument runs one piece only: 360p, 480p, 720p, 1080p, or poster.
 # The media worker uses it to run one command per container request. With it
 # set, the master playlist is left to the caller.
 ONLY="${3:-}"
@@ -21,11 +21,11 @@ if [[ -z "$ONLY" ]]; then
 fi
 
 add_variant() {
-    local label="$1" width="$2" height="$3" bitrate="$4"
+    local label="$1" width="$2" height="$3" bitrate="$4" always="${5:-}"
     if [[ -n "$ONLY" && "$ONLY" != "$label" ]]; then
         return
     fi
-    if (( HEIGHT + 16 < height )); then
+    if [[ -z "$always" ]] && (( HEIGHT + 16 < height )); then
         return
     fi
     local dir="$WORKDIR/$label"
@@ -47,6 +47,11 @@ add_variant() {
     echo "$label/playlist.m3u8" >> "$MASTER"
 }
 
+# A source shorter than the smallest size below still needs one stream, or
+# the master playlist would be empty. Encode it at 360p instead.
+if (( HEIGHT + 16 < 480 )); then
+    add_variant 360p 640 360 400k always
+fi
 add_variant 480p 854 480 500k
 add_variant 720p 1280 720 1200k
 add_variant 1080p 1920 1080 2500k

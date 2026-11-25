@@ -19,15 +19,20 @@ use Throwable;
 class MediaWorker
 {
     /**
-     * Same table and height rule as scripts/hls_package.sh.
+     * Same table and height rule as scripts/hls_package.sh. 360p is the
+     * fallback: it is encoded only when the source is too short for 480p, so
+     * every recording gets at least one stream.
      *
      * @var array<string, array{width: int, height: int, bitrate: string}>
      */
     public const RENDITIONS = [
+        '360p' => ['width' => 640, 'height' => 360, 'bitrate' => '400k'],
         '480p' => ['width' => 854, 'height' => 480, 'bitrate' => '500k'],
         '720p' => ['width' => 1280, 'height' => 720, 'bitrate' => '1200k'],
         '1080p' => ['width' => 1920, 'height' => 1080, 'bitrate' => '2500k'],
     ];
+
+    public const FALLBACK = '360p';
 
     public const SIGNATURE_HEADER = 'X-Media-Signature';
 
@@ -79,9 +84,11 @@ class MediaWorker
     public function steps(ZoomRecording $recording): array
     {
         $height = $recording->source_height ?? 720;
-        $renditions = collect(self::RENDITIONS)
+        $labels = collect(self::RENDITIONS)
+            ->except(self::FALLBACK)
             ->filter(fn (array $variant) => $height + 16 >= $variant['height'])
-            ->keys()
+            ->keys();
+        $renditions = ($labels->isEmpty() ? collect([self::FALLBACK]) : $labels)
             ->map(fn (string $label) => 'rendition:'.$label)
             ->all();
 
