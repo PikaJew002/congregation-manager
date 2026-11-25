@@ -23,6 +23,8 @@ class ZoomRecording extends Model
         'failed_step',
         'error',
         'source_path',
+        'source_height',
+        'media_step',
         'hls_path',
         'hidden',
         'log',

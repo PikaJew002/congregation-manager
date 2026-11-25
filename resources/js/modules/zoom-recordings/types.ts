@@ -9,7 +9,14 @@ export type RecordingStatus =
     | 'completed'
     | 'failed';
 
-export type RecordingStep = 'download' | 'transcode' | 'manifest';
+export type RecordingStep =
+    | 'download'
+    | 'transcode'
+    | 'rendition:480p'
+    | 'rendition:720p'
+    | 'rendition:1080p'
+    | 'poster'
+    | 'manifest';
 
 export type ZoomRecording = {
     id: number;
