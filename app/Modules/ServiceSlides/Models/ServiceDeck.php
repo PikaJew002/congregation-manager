@@ -6,7 +6,24 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $id
+ * @property int $service_id
+ * @property int $slide_template_id
+ * @property string $name
+ * @property int $position
+ * @property string|null $generated_path
+ * @property Carbon|null $generated_at
+ * @property string $status
+ * @property list<string>|null $warnings
+ * @property bool $stale
+ * @property bool $blocked
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Service $service
+ */
 class ServiceDeck extends Model
 {
     protected $fillable = [

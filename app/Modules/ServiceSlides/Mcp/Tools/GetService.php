@@ -4,7 +4,11 @@ namespace App\Modules\ServiceSlides\Mcp\Tools;
 
 use App\Mcp\CongregationContext;
 use App\Mcp\ModuleTool;
+use App\Models\Team;
+use App\Models\User;
 use App\Modules\ServiceSlides\Models\Service;
+use App\Modules\ServiceSlides\Models\ServiceDeck;
+use App\Modules\ServiceSlides\Support\SlideFileLinks;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -14,9 +18,9 @@ class GetService extends Tool
 {
     use ModuleTool;
 
-    protected string $description = 'Get one service, including each deck and its items.';
+    protected string $description = 'Get one service, including each deck and its items. A deck with a generated file includes downloadUrl, a link that expires after 10 minutes; give it to the person to open rather than fetching it yourself.';
 
-    public function __construct(private CongregationContext $context) {}
+    public function __construct(private CongregationContext $context, private SlideFileLinks $links) {}
 
     public function schema(JsonSchema $schema): array
     {
@@ -44,7 +48,9 @@ class GetService extends Tool
             return Response::error('No service on that date.');
         }
 
-        $service->load('decks.entries.source', 'decks.entries.templateSlide', 'decks.template');
+        $service->load('decks.service', 'decks.entries.source', 'decks.entries.templateSlide', 'decks.template');
+        /** @var User $user */
+        $user = $request->user();
 
         return Response::json([
             'date' => $service->service_date->toDateString(),
@@ -59,7 +65,18 @@ class GetService extends Tool
                     'type' => $entry->entry_type,
                     'slot' => $entry->slot_key,
                 ])->all(),
+                ...$this->links->deckDownloadable($deck) ? $this->deckLink($user, $team, $deck) : [],
             ])->all(),
         ]);
+    }
+
+    /**
+     * @return array{downloadUrl: string, expiresAt: string}
+     */
+    private function deckLink(User $user, Team $team, ServiceDeck $deck): array
+    {
+        $link = $this->links->forDeck($user, $team, $deck);
+
+        return ['downloadUrl' => $link['url'], 'expiresAt' => $link['expiresAt']];
     }
 }

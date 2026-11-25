@@ -12,6 +12,7 @@ Route::get('library', [LibraryController::class, 'index'])->name('library');
 Route::get('library/search', [LibraryController::class, 'search'])->name('library.search');
 Route::post('library', [LibraryController::class, 'store'])->name('library.store');
 Route::put('library/{source}', [LibraryController::class, 'update'])->name('library.update');
+Route::get('library/{source}/download', [LibraryController::class, 'download'])->name('library.download');
 Route::post('library/{source}/file', [LibraryController::class, 'replaceFile'])->name('library.file');
 Route::delete('library/{source}', [LibraryController::class, 'archive'])->name('library.destroy');
 Route::post('library/{source}/restore', [LibraryController::class, 'restore'])->name('library.restore');

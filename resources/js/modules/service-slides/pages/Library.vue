@@ -13,6 +13,7 @@ import { destroy as destroyAlias } from '@/routes/service-slides/aliases';
 import {
     aliases,
     destroy,
+    download,
     file,
     restore,
     store,
@@ -482,6 +483,21 @@ const replaceFromUrl = (source: SlideSource) => {
                             >
                                 {{ source.archived ? 'Restore' : 'Archive' }}
                             </Button>
+                            <a
+                                :href="download.url([teamSlug, source.id])"
+                                class="inline-flex h-8 items-center rounded-md border border-input px-3 text-sm hover:bg-accent"
+                                >Download</a
+                            >
+                            <a
+                                v-if="source.has_original_file"
+                                :href="
+                                    download.url([teamSlug, source.id], {
+                                        query: { file: 'original' },
+                                    })
+                                "
+                                class="inline-flex h-8 items-center rounded-md border border-input px-3 text-sm hover:bg-accent"
+                                >Download original</a
+                            >
                             <label
                                 class="inline-flex h-8 cursor-pointer items-center rounded-md border border-input px-3 text-sm hover:bg-accent"
                                 :class="{

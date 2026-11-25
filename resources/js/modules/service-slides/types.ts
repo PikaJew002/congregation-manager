@@ -21,6 +21,8 @@ export type SlideSource = {
     slide_lines: string[] | null;
     archived: boolean;
     last_used_on?: string | null;
+    /** Whether the original upload differs from the formatted file decks use (songs only). */
+    has_original_file?: boolean | number;
     aliases?: SlideAlias[];
 };
 

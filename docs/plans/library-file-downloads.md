@@ -16,14 +16,14 @@ New route `GET service-slides/library/{source}/download`, next to the other libr
 - `file=formatted` (default) streams `file_path`; `file=original` streams `original_path`.
 - It returns 404 when the item belongs to another team or the file is missing, as the deck download does.
 - The download is named after the title with the stored format's extension, for example `Blessed Be Your Name.odp`. Characters not allowed in file names are replaced, matching how `DeckController::fileName()` names decks.
-- The Library page gets a download button on each row. For songs whose original differs from the formatted file, a small menu offers the formatted file (used in decks) or the original upload.
+- The Library page gets a Download button in each item's actions. For songs whose original differs from the formatted file (`has_original_file` on each row), a second Download original button sits beside it.
 - Archived items stay downloadable.
 
 ## Through MCP: signed links
 
 A tool cannot put a file on the user's computer, and embedding files in responses is handled poorly by many clients and wastes context on files up to several megabytes. MCP returns a short-lived link to the app instead.
 
-New route `GET service-slides/files/{token}` outside the login middleware, using Laravel's signed URLs:
+New route `GET slide-files/{kind}/{id}` (`kind` is `library` or `deck`) outside the login middleware, using Laravel's signed URLs and throttled to 60 requests a minute:
 
 - Created with `URL::temporarySignedRoute()`, valid for 10 minutes.
 - The signed parameters say what to send (`library` item and `formatted` or `original`, or a generated `deck`), the user, and the congregation. Changing any of them breaks the signature, so a link cannot be edited to reach another item or congregation.
@@ -35,7 +35,7 @@ The URL holds ids and a signature, nothing private. Anyone holding a link can us
 
 ## MCP tools
 
-- New `get-library-file`: takes a library item `id` (as returned by `search-library`) and optional `file` (`formatted` or `original`). It returns `{ title, format, file, url, expiresAt }`, or an error when the item is not in this congregation.
+- New `get-library-file`: takes a library item `id` (as returned by `search-library`) and optional `file` (`formatted` or `original`). It returns `{ title, format, file, fileName, url, expiresAt }`, or an error when the item is not in this congregation.
 - `get-service`: each deck with a generated file gains `downloadUrl` and `expiresAt`. A deck still generating or failed has none.
 - `generate-deck` stays asynchronous. Its description says to call `get-service` for the link once the deck is ready.
 
