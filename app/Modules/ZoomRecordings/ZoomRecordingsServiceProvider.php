@@ -3,6 +3,7 @@
 namespace App\Modules\ZoomRecordings;
 
 use App\Http\Middleware\EnsureTeamMembership;
+use App\Modules\ZoomRecordings\Console\LookUpHebcalCommand;
 use App\Modules\ZoomRecordings\Http\Controllers\MediaWorkerCallbackController;
 use App\Modules\ZoomRecordings\Http\Controllers\ZoomWebhookController;
 use App\Support\Modules\ModuleRegistry;
@@ -19,6 +20,10 @@ class ZoomRecordingsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadMigrationsFrom(__DIR__.'/database/migrations');
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([LookUpHebcalCommand::class]);
+        }
 
         Route::middleware(['web', 'auth', 'verified', EnsureTeamMembership::class, 'module:zoom-recordings'])
             ->prefix('{current_team}/recordings')

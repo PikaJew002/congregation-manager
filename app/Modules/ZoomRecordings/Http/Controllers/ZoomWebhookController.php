@@ -5,6 +5,7 @@ namespace App\Modules\ZoomRecordings\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Modules\ZoomRecordings\Actions\DispatchRecordingPipeline;
+use App\Modules\ZoomRecordings\Jobs\LookUpRecordingDate;
 use App\Modules\ZoomRecordings\Models\ZoomRecording;
 use App\Modules\ZoomRecordings\Models\ZoomRecordingSetting;
 use App\Support\Modules\ModuleAccess;
@@ -70,6 +71,7 @@ class ZoomWebhookController extends Controller
         }
 
         if ($recording->wasRecentlyCreated) {
+            LookUpRecordingDate::dispatch($recording->id)->afterResponse();
             $pipeline->handle($recording);
         }
 

@@ -32,7 +32,11 @@ class UpdateManifest implements ShouldQueue
             $items->prepend([
                 'id' => $recording->id,
                 'title' => $recording->title,
-                'date' => optional($recording->recorded_at)->toDateString(),
+                'date' => $recording->localDate()?->toDateString(),
+                'service' => $recording->serviceLabel(),
+                'service_title' => $recording->serviceTitle(),
+                'speaker' => $recording->speaker ?: null,
+                'torah_portion' => $recording->torah_portion ?: null,
                 'duration' => $recording->duration_minutes,
                 'hls' => $base.'/'.$recording->hls_path,
                 'mp4' => $base.'/'.$recording->directory().'/source.mp4',
