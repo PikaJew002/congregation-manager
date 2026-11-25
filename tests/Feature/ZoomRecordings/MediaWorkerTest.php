@@ -94,7 +94,7 @@ class MediaWorkerTest extends TestCase
         $this->report($recording, ['step' => 'poster', 'ok' => true])->assertOk();
 
         $master = Storage::disk('r2-public')->get((string) $recording->fresh()->hls_path);
-        $this->assertSame("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=640x360\n360p/playlist.m3u8\n", $master);
+        $this->assertSame("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=568000,RESOLUTION=640x360\n360p/playlist.m3u8\n", $master);
     }
 
     public function test_the_last_rendition_for_720p_moves_to_the_poster(): void
@@ -118,8 +118,8 @@ class MediaWorkerTest extends TestCase
         $this->assertNull($recording->media_step);
         $this->assertSame('recordings/'.$recording->id.'/playlist.m3u8', $recording->hls_path);
         $master = Storage::disk('r2-public')->get($recording->hls_path);
-        $this->assertStringContainsString("RESOLUTION=854x480\n480p/playlist.m3u8", $master);
-        $this->assertStringContainsString("RESOLUTION=1280x720\n720p/playlist.m3u8", $master);
+        $this->assertStringContainsString("BANDWIDTH=678000,RESOLUTION=854x480\n480p/playlist.m3u8", $master);
+        $this->assertStringContainsString("BANDWIDTH=1448000,RESOLUTION=1280x720\n720p/playlist.m3u8", $master);
         $this->assertStringNotContainsString('1080p', $master);
         $this->assertStringNotContainsString('360p', $master);
         Storage::disk('r2-public')->assertExists('recordings/recordings.json');

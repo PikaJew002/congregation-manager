@@ -188,7 +188,8 @@ class MediaWorker
                 }
                 $label = substr($step, strlen('rendition:'));
                 $variant = self::RENDITIONS[$label];
-                $bandwidth = ((int) $variant['bitrate']) * 1000;
+                // Peak video (1.1x maxrate) plus 128k audio, as in hls_package.sh.
+                $bandwidth = (intdiv((int) $variant['bitrate'] * 11, 10) + 128) * 1000;
                 $master .= "#EXT-X-STREAM-INF:BANDWIDTH={$bandwidth},RESOLUTION={$variant['width']}x{$variant['height']}\n{$label}/playlist.m3u8\n";
             }
 
