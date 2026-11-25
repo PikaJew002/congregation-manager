@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import CongregationTimezone from '@/components/CongregationTimezone.vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -30,23 +31,14 @@ defineOptions({
 
 const page = usePage();
 
-const timezones = Intl.supportedValuesOf('timeZone');
-
 let teamSlug = computed(() => page.props.currentTeam?.slug ?? '');
 
 let form = useForm({
     enabled: props.settings.enabled,
     send_day: Number(props.settings.send_day),
     send_time: props.settings.send_time.slice(0, 5),
-    timezone: props.settings.timezone,
     window_minutes: Number(props.settings.window_minutes),
 });
-
-let timezoneOptions = computed(() =>
-    timezones.includes(form.timezone)
-        ? timezones
-        : [form.timezone, ...timezones],
-);
 
 let windowLabel = computed(() => {
     const minutes = Number(form.window_minutes) || 0;
@@ -60,7 +52,7 @@ let windowLabel = computed(() => {
 
 let summary = computed(
     () =>
-        `Every ${weekdays[form.send_day]}, sending starts at ${form.send_time} (${form.timezone}) and is spread over ${windowLabel.value || '0m'}.`,
+        `Every ${weekdays[form.send_day]}, sending starts at ${form.send_time} (${page.props.currentTeam?.timezone ?? 'America/New_York'}) and is spread over ${windowLabel.value || '0m'}.`,
 );
 
 const selectClass =
@@ -134,23 +126,9 @@ const submit = () => {
                     <InputError :message="form.errors.send_time" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="timezone">Time zone</Label>
-                    <select
-                        id="timezone"
-                        v-model="form.timezone"
-                        :class="selectClass"
-                    >
-                        <option
-                            v-for="zone in timezoneOptions"
-                            :key="zone"
-                            :value="zone"
-                        >
-                            {{ zone }}
-                        </option>
-                    </select>
-                    <InputError :message="form.errors.timezone" />
-                </div>
+                <CongregationTimezone
+                    usage="The send time is in this time zone."
+                />
 
                 <div class="grid gap-2">
                     <Label for="window_minutes">Send window (minutes)</Label>

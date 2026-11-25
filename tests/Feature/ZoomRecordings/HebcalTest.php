@@ -111,7 +111,7 @@ class HebcalTest extends TestCase
 
     public function test_the_time_zone_setting_changes_the_local_date(): void
     {
-        ZoomRecordingSetting::forTeam($this->team)->update(['timezone' => 'Asia/Jerusalem']);
+        $this->team->update(['timezone' => 'Asia/Jerusalem']);
         $recording = $this->recording('2026-11-21 23:00:00');
 
         $this->assertSame('2026-11-22', $recording->localDate()?->toDateString());
@@ -225,23 +225,17 @@ class HebcalTest extends TestCase
         $this->assertSame('Shabbat Morning Service - Nov 21, 2026', $recording->serviceTitle());
     }
 
-    public function test_the_time_zone_is_saved_and_validated(): void
+    public function test_recording_settings_no_longer_take_a_time_zone(): void
     {
-        $settings = ['r2_prefix' => 'recordings', 'preferred_recording_type' => 'speaker_view'];
-
         $this->actingAs($this->owner)
-            ->put(route('zoom-recordings.settings.update', $this->team->slug), $settings + ['timezone' => 'America/Chicago'])
+            ->put(route('zoom-recordings.settings.update', $this->team->slug), [
+                'r2_prefix' => 'recordings',
+                'preferred_recording_type' => 'speaker_view',
+                'timezone' => 'America/Chicago',
+            ])
             ->assertRedirect();
-        $this->assertSame('America/Chicago', ZoomRecordingSetting::forTeam($this->team)->timezone);
 
-        $this->actingAs($this->owner)
-            ->put(route('zoom-recordings.settings.update', $this->team->slug), $settings + ['timezone' => 'Mars/Olympus'])
-            ->assertSessionHasErrors('timezone');
-    }
-
-    public function test_new_settings_default_to_new_york(): void
-    {
-        $this->assertSame('America/New_York', ZoomRecordingSetting::forTeam($this->team)->timezone);
+        $this->assertSame('America/New_York', $this->team->fresh()->timezone);
     }
 
     public function test_the_backfill_command_fills_recordings_without_hebcal_data(): void

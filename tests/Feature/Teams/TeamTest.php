@@ -103,6 +103,35 @@ class TeamTest extends TestCase
         ]);
     }
 
+    public function test_the_time_zone_is_saved_and_validated()
+    {
+        $user = User::factory()->create();
+        $team = Team::factory()->create();
+        $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+
+        $this->assertSame('America/New_York', $team->fresh()->timezone);
+
+        $this->actingAs($user)
+            ->patch(route('teams.update', $team), ['name' => $team->name, 'timezone' => 'America/Chicago'])
+            ->assertRedirect();
+        $this->assertSame('America/Chicago', $team->fresh()->timezone);
+
+        $this->actingAs($user)
+            ->patch(route('teams.update', $team), ['name' => $team->name, 'timezone' => 'Mars/Olympus'])
+            ->assertSessionHasErrors('timezone');
+        $this->assertSame('America/Chicago', $team->fresh()->timezone);
+    }
+
+    public function test_a_date_with_a_time_is_read_as_a_day_in_the_congregations_time_zone()
+    {
+        $team = Team::factory()->create(['timezone' => 'America/New_York']);
+
+        $this->assertSame('2026-11-28', $team->localDate('2026-11-28'));
+        $this->assertSame('2026-11-27', $team->localDate('2026-11-28T03:00:00Z'));
+        $this->assertSame('2026-11-28', $team->localDate('2026-11-28T03:00:00-05:00'));
+        $this->assertSame('2026-11-28', $team->localDate('2026-11-28 21:00'));
+    }
+
     public function test_teams_cannot_be_updated_by_members()
     {
         $owner = User::factory()->create();

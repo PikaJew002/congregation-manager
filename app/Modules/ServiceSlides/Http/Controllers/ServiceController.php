@@ -43,9 +43,11 @@ class ServiceController extends Controller
             'template_ids.*' => ['integer', Rule::exists('slide_templates', 'id')->where('team_id', $current_team->id)],
         ]);
 
+        $date = $current_team->localDate($data['service_date']);
+
         $service = Service::query()->firstOrCreate(
-            ['team_id' => $current_team->id, 'service_date' => $data['service_date']],
-            ['title' => $data['title'] ?: $data['service_date'], 'source' => 'manual'],
+            ['team_id' => $current_team->id, 'service_date' => $date],
+            ['title' => $data['title'] ?: $date, 'source' => 'manual'],
         );
 
         foreach ($data['template_ids'] ?? [] as $templateId) {

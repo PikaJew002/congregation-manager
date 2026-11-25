@@ -22,7 +22,7 @@ class UpsertServiceDeck extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'date' => $schema->string()->description('Service date, YYYY-MM-DD.')->required(),
+            'date' => $schema->string()->description('Service date, YYYY-MM-DD: the day in the congregation\'s time zone (see the server instructions for today).')->required(),
             'template' => $schema->string()->description('Template name or default kind, such as Music or song.')->required(),
             'titles' => $schema->array()->items($schema->string())->description('Short form: library titles in order, for a template with one repeating slot.'),
             'slots' => $schema->object()->description('Titles per slot key from list_templates, for example {"songs": ["Kumi Ori"], "opening": ["Psalm 19"]}.'),

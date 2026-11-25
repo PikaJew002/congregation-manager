@@ -22,7 +22,6 @@ class WeeklyEmailSetting extends Model
         'reply_to',
         'send_day',
         'send_time',
-        'timezone',
         'window_minutes',
     ];
 

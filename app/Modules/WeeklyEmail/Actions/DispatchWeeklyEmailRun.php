@@ -23,7 +23,7 @@ class DispatchWeeklyEmailRun
                 return;
             }
 
-            $localNow = ($now ?? CarbonImmutable::now())->timezone($settings->timezone);
+            $localNow = ($now ?? CarbonImmutable::now())->timezone($settings->team->localTimezone());
             $start = $localNow->setTimeFromTimeString($settings->send_time);
 
             if ($localNow->dayOfWeek !== (int) $settings->send_day) {

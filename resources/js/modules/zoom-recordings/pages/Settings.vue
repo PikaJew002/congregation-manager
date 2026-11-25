@@ -3,6 +3,7 @@ import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { Copy } from '@lucide/vue';
 import { computed } from 'vue';
 import { toast } from 'vue-sonner';
+import CongregationTimezone from '@/components/CongregationTimezone.vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -56,16 +57,7 @@ let form = useForm({
     r2_prefix: props.settings.r2_prefix,
     public_base_url: props.settings.public_base_url ?? '',
     preferred_recording_type: props.settings.preferred_recording_type,
-    timezone: props.settings.timezone,
 });
-
-const timezones = Intl.supportedValuesOf('timeZone');
-
-let timezoneOptions = computed(() =>
-    timezones.includes(form.timezone)
-        ? timezones
-        : [form.timezone, ...timezones],
-);
 
 let typeOptions = computed(() =>
     recordingTypes.some((t) => t.value === form.preferred_recording_type)
@@ -262,28 +254,9 @@ const submit = () => {
                     />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="timezone">Time zone</Label>
-                    <select
-                        id="timezone"
-                        v-model="form.timezone"
-                        :class="selectClass"
-                    >
-                        <option
-                            v-for="zone in timezoneOptions"
-                            :key="zone"
-                            :value="zone"
-                        >
-                            {{ zone }}
-                        </option>
-                    </select>
-                    <p class="text-xs text-muted-foreground">
-                        Used for each recording's date, so an evening service is
-                        not filed under the next day, and for the Hebrew
-                        calendar lookup.
-                    </p>
-                    <InputError :message="form.errors.timezone" />
-                </div>
+                <CongregationTimezone
+                    usage="Used for each recording's date, so an evening service is not filed under the next day, and for the Hebrew calendar lookup."
+                />
             </section>
 
             <div class="flex items-center gap-4">

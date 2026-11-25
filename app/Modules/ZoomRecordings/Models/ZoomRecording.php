@@ -77,9 +77,7 @@ class ZoomRecording extends Model
             return null;
         }
 
-        $timezone = ZoomRecordingSetting::forTeam($this->team)->timezone ?: 'America/New_York';
-
-        return CarbonImmutable::parse($this->recorded_at)->setTimezone($timezone);
+        return CarbonImmutable::parse($this->recorded_at)->setTimezone($this->team->localTimezone());
     }
 
     public function serviceLabel(): string

@@ -19,7 +19,6 @@ export type WeeklyEmailSettings = {
     reply_to: string | null;
     send_day: number;
     send_time: string;
-    timezone: string;
     window_minutes: number;
 };
 

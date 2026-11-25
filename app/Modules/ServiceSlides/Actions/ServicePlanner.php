@@ -185,6 +185,7 @@ class ServicePlanner
     public function upsert(Team $team, string $date, string $templateName, ?array $titles = null, ?array $slots = null, string $source = 'manual'): array
     {
         $template = $this->template($team, $templateName);
+        $date = $team->localDate($date);
 
         $service = Service::query()->firstOrCreate(
             ['team_id' => $team->id, 'service_date' => $date],

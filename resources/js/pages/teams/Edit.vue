@@ -8,6 +8,7 @@ import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import InviteMemberModal from '@/components/InviteMemberModal.vue';
 import RemoveMemberModal from '@/components/RemoveMemberModal.vue';
+import TimezoneSelect from '@/components/TimezoneSelect.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -65,6 +66,8 @@ defineOptions({
 });
 
 const { getInitials } = useInitials();
+
+const timezone = ref(props.team.timezone ?? 'America/New_York');
 
 const inviteDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
@@ -128,7 +131,7 @@ const toggleMemberModule = (
             <Heading
                 variant="small"
                 title="Congregation settings"
-                description="Update the congregation name and which modules are on"
+                description="Update the congregation name, time zone and which modules are on"
             />
 
             <Form
@@ -146,6 +149,22 @@ const toggleMemberModule = (
                         required
                     />
                     <InputError :message="errors.name" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="timezone">Time zone</Label>
+                    <TimezoneSelect
+                        id="timezone"
+                        v-model="timezone"
+                        name="timezone"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Where your services happen. Dates you enter, here or
+                        through an AI assistant, are days in this time zone, and
+                        times are shown in it. It also sets each recording's
+                        date and the Weekly Email send time.
+                    </p>
+                    <InputError :message="errors.timezone" />
                 </div>
 
                 <div class="flex items-center gap-4">

@@ -163,7 +163,6 @@ class WeeklyEmailController extends Controller
             'enabled' => ['required', 'boolean'],
             'send_day' => ['required', 'integer', 'between:0,6'],
             'send_time' => ['required', 'date_format:H:i'],
-            'timezone' => ['required', 'timezone'],
             'window_minutes' => ['required', 'integer', 'between:30,240'],
         ]);
 

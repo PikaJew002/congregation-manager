@@ -10,6 +10,7 @@ use App\Modules\ServiceSlides\Actions\ServicePlanner;
 use App\Modules\ServiceSlides\Mcp\Tools\AddAlias;
 use App\Modules\ServiceSlides\Mcp\Tools\AddLibraryItem;
 use App\Modules\ServiceSlides\Mcp\Tools\CreateTemplate;
+use App\Modules\ServiceSlides\Mcp\Tools\GetService;
 use App\Modules\ServiceSlides\Mcp\Tools\ListTemplates;
 use App\Modules\ServiceSlides\Mcp\Tools\SearchLibrary;
 use App\Modules\ServiceSlides\Mcp\Tools\SetPreset;
@@ -19,9 +20,11 @@ use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
 use App\Modules\ServiceSlides\Support\OdpInspector;
 use App\Modules\ServiceSlides\Support\PptxInspector;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Mcp\Server\Transport\FakeTransporter;
 use ReflectionMethod;
 use Tests\TestCase;
 
@@ -74,6 +77,42 @@ class ServiceSlidesMcpTest extends TestCase
             'team_id' => $team->id,
             'source' => 'mcp',
         ]);
+    }
+
+    public function test_service_dates_are_days_in_the_congregations_time_zone(): void
+    {
+        Storage::fake('files');
+        [$team, $owner] = $this->owner();
+        $this->template($team);
+        $this->approveMcp($team);
+
+        // 3 AM UTC on Nov 28 is still the evening of Nov 27 in New York.
+        CongregationServer::actingAs($owner)
+            ->tool(UpsertServiceDeck::class, ['date' => '2026-11-28T03:00:00Z', 'template' => 'Music', 'titles' => ['Kumi Ori']])
+            ->assertOk();
+
+        $this->assertSame('2026-11-27', Service::query()->sole()->service_date->toDateString());
+
+        CongregationServer::actingAs($owner)
+            ->tool(GetService::class, ['date' => '2026-11-27'])
+            ->assertOk()
+            ->assertSee('2026-11-27');
+    }
+
+    public function test_the_server_instructions_give_today_in_the_congregations_time_zone(): void
+    {
+        [$team, $owner] = $this->owner();
+        $team->update(['timezone' => 'America/Chicago']);
+        $this->travelTo(CarbonImmutable::parse('2026-11-28 03:00:00', 'UTC'));
+        $this->approveMcp($team);
+        $this->actingAs($owner);
+
+        $server = new CongregationServer(new FakeTransporter);
+        $server->start();
+        $instructions = $server->createContext()->instructions;
+
+        $this->assertStringContainsString('America/Chicago', $instructions);
+        $this->assertStringContainsString('today is 2026-11-27', $instructions);
     }
 
     public function test_a_congregation_token_can_add_a_library_item(): void

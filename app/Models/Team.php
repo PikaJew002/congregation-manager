@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Concerns\GeneratesUniqueTeamSlugs;
 use App\Enums\TeamRole;
+use Carbon\CarbonImmutable;
 use Database\Factories\TeamFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
@@ -20,6 +21,7 @@ use Illuminate\Support\Str;
  * @property string $uuid
  * @property string $name
  * @property string $slug
+ * @property string $timezone
  * @property bool $is_personal
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -28,11 +30,16 @@ use Illuminate\Support\Str;
  * @property-read Collection<int, Membership> $memberships
  * @property-read Collection<int, User> $members
  */
-#[Fillable(['name', 'slug', 'is_personal', 'uuid'])]
+#[Fillable(['name', 'slug', 'timezone', 'is_personal', 'uuid'])]
 class Team extends Model
 {
     /** @use HasFactory<TeamFactory> */
     use GeneratesUniqueTeamSlugs, HasFactory, SoftDeletes;
+
+    public const DEFAULT_TIMEZONE = 'America/New_York';
+
+    /** @var array<string, mixed> */
+    protected $attributes = ['timezone' => self::DEFAULT_TIMEZONE];
 
     /**
      * Bootstrap the model and its traits.
@@ -115,6 +122,34 @@ class Team extends Model
     public function moduleGrants(): HasMany
     {
         return $this->hasMany(TeamModuleUser::class);
+    }
+
+    /** The congregation's time zone, where its services happen. */
+    public function localTimezone(): string
+    {
+        return $this->timezone ?: self::DEFAULT_TIMEZONE;
+    }
+
+    /** The current moment in the congregation's time zone. */
+    public function localNow(): CarbonImmutable
+    {
+        return CarbonImmutable::now($this->localTimezone());
+    }
+
+    /**
+     * A calendar date (Y-m-d) from what someone typed or an MCP client sent. A
+     * plain date is taken as it is; a moment with a time is read in the
+     * congregation's time zone, so 2026-11-28T03:00:00Z is Nov 27 in New York.
+     */
+    public function localDate(string $value): string
+    {
+        $value = trim($value);
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1) {
+            return $value;
+        }
+
+        return CarbonImmutable::parse($value, $this->localTimezone())->setTimezone($this->localTimezone())->toDateString();
     }
 
     public function privilegedMemberCount(): int

@@ -60,6 +60,14 @@ class CongregationContext
         return $team instanceof Team && $this->access->canUse($user, $team, $module);
     }
 
+    /** The congregation the current connection acts for, if any. */
+    public function current(): ?Team
+    {
+        $user = auth()->user();
+
+        return $user instanceof User ? $this->team($user) : null;
+    }
+
     public function team(User $user): ?Team
     {
         if (request()->attributes->get('mcp.oauth') !== true) {
