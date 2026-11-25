@@ -22,6 +22,8 @@ use Illuminate\Support\Carbon;
  * @property string $conversion_status
  * @property int $slide_count
  * @property list<string|null>|null $slide_lines
+ * @property list<list<string>>|null $slide_text
+ * @property string|null $search_text
  * @property string|null $page_size
  * @property Carbon|null $file_updated_at
  * @property bool $archived
@@ -34,14 +36,18 @@ class SlideSource extends Model
 
     protected $fillable = [
         'team_id', 'kind', 'title', 'author', 'ccli', 'notes', 'original_path', 'original_format',
-        'file_path', 'conversion_status', 'slide_count', 'slide_lines', 'page_size', 'file_updated_at', 'archived',
+        'file_path', 'conversion_status', 'slide_count', 'slide_lines', 'slide_text', 'search_text', 'page_size', 'file_updated_at', 'archived',
     ];
+
+    /** Full slide text stays on the server; pages search it through the library search endpoint. */
+    protected $hidden = ['slide_text', 'search_text'];
 
     protected function casts(): array
     {
         return [
             'archived' => 'boolean',
             'slide_lines' => 'array',
+            'slide_text' => 'array',
             'file_updated_at' => 'datetime',
         ];
     }

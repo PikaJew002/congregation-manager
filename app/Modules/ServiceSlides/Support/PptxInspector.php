@@ -22,6 +22,7 @@ class PptxInspector implements SlideInspector
                 'label' => $line !== null ? mb_substr($line, 0, 80) : 'Slide '.($index + 1),
                 'empty' => self::isBlank($package->files[$part]),
                 'line' => $line !== null ? mb_substr($line, 0, 200) : null,
+                'lines' => $lines,
             ];
         }
 

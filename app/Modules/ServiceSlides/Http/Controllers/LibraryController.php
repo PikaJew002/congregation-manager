@@ -8,9 +8,11 @@ use App\Modules\ServiceSlides\Actions\SlideFiles;
 use App\Modules\ServiceSlides\Models\ServiceDeckEntry;
 use App\Modules\ServiceSlides\Models\SlideSource;
 use App\Modules\ServiceSlides\Models\SlideSourceAlias;
+use App\Modules\ServiceSlides\Support\LibrarySearch;
 use App\Modules\ServiceSlides\Support\ResolvesPresentationUpload;
 use App\Modules\ServiceSlides\Support\SlideFormats;
 use App\Modules\ServiceSlides\Support\SlideLinkDownloader;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -39,6 +41,35 @@ class LibraryController extends Controller
                 ->orderBy('title')
                 ->get(),
             'kinds' => config('modules.slide_kinds'),
+        ]);
+    }
+
+    /**
+     * Library items whose slide text matches, for pages that filter titles in the browser.
+     */
+    public function search(Request $request, Team $current_team, LibrarySearch $search): JsonResponse
+    {
+        $data = $request->validate([
+            'q' => ['required', 'string', 'max:200'],
+            'kind' => ['nullable', 'string'],
+            'archived' => ['nullable', 'boolean'],
+        ]);
+
+        $found = $search->search(
+            $current_team,
+            $data['q'],
+            ($data['kind'] ?? null) ?: null,
+            'content',
+            withArchived: (bool) ($data['archived'] ?? false),
+            limit: 50,
+        );
+
+        return response()->json([
+            'items' => array_map(fn (array $item) => [
+                'id' => $item['id'],
+                'slide' => $item['slide'] ?? null,
+                'excerpt' => $item['excerpt'] ?? null,
+            ], $found['items']),
         ]);
     }
 
