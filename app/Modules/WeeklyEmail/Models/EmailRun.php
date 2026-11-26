@@ -7,7 +7,21 @@ use App\Models\Team;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $id
+ * @property int $team_id
+ * @property Carbon $scheduled_for
+ * @property string $status
+ * @property string $subject
+ * @property string $body
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read int|null $deliveries_count
+ * @property-read int|null $sent_count
+ * @property-read int|null $failed_count
+ */
 class EmailRun extends Model
 {
     use BelongsToTeam;
