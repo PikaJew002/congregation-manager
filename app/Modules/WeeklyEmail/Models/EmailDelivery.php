@@ -3,6 +3,7 @@
 namespace App\Modules\WeeklyEmail\Models;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -64,5 +65,16 @@ class EmailDelivery extends Model
     public function recipient(): BelongsTo
     {
         return $this->belongsTo(EmailRecipient::class, 'email_recipient_id');
+    }
+
+    /**
+     * Failed emails worth trying again: the person is still on the list.
+     *
+     * @param  Builder<EmailDelivery>  $query
+     */
+    public function scopeRetryable(Builder $query): void
+    {
+        $query->where('status', 'failed')
+            ->whereHas('recipient', fn (Builder $recipient) => $recipient->where('status', 'subscribed'));
     }
 }

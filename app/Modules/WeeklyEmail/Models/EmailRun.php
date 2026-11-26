@@ -23,6 +23,7 @@ use Illuminate\Support\Carbon;
  * @property-read int|null $deliveries_count
  * @property-read int|null $sent_count
  * @property-read int|null $failed_count
+ * @property-read int|null $retryable_count
  */
 class EmailRun extends Model
 {

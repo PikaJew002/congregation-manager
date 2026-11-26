@@ -7,6 +7,7 @@ use App\Models\Team;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 /**
@@ -55,6 +56,14 @@ class EmailRecipient extends Model
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
+    }
+
+    /**
+     * @return HasMany<EmailDelivery, $this>
+     */
+    public function deliveries(): HasMany
+    {
+        return $this->hasMany(EmailDelivery::class);
     }
 
     public function unsubscribeUrl(): string

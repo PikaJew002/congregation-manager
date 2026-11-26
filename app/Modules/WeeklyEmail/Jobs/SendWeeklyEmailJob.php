@@ -89,7 +89,12 @@ class SendWeeklyEmailJob implements ShouldQueue
         }
 
         if ($delivery->recipient->status !== 'subscribed') {
-            $delivery->update(['status' => 'cancelled', 'error' => 'Unsubscribed before this email went out.']);
+            $delivery->update(['status' => 'cancelled', 'error' => match ($delivery->recipient->status) {
+                'bounced' => 'The address bounced before this email went out.',
+                'complained' => 'Reported the weekly email as spam before this email went out.',
+                'suppressed' => 'MailChannels refused the address before this email went out.',
+                default => 'Unsubscribed before this email went out.',
+            }]);
             $this->refreshRun($delivery);
 
             return;

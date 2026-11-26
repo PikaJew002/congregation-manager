@@ -247,9 +247,13 @@ class WeeklyEmailController extends Controller
         // A paused run is picked up with Resume, which also checks the account.
         abort_if(in_array($run->status, ['cancelled', 'paused'], true), 422);
 
-        $failed = $run->deliveries()->where('status', 'failed')->orderBy('scheduled_at')->get();
+        // Only people still on the list; a bounced or suppressed address would
+        // fail again.
+        $failed = $run->deliveries()->retryable()->orderBy('scheduled_at')->get();
 
         if ($failed->isEmpty()) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('There is nobody to retry. Everyone whose email failed has been taken off the list.')]);
+
             return back();
         }
 

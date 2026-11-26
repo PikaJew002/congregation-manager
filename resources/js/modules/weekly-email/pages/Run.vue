@@ -51,10 +51,21 @@ let canCancel = computed(
         counts.value.pending > 0,
 );
 
+// Only people still on the list are retried; a bounced or suppressed
+// address would fail again.
+let retryable = computed(
+    () =>
+        props.deliveries.filter(
+            (delivery) =>
+                delivery.status === 'failed' &&
+                delivery.recipient?.status === 'subscribed',
+        ).length,
+);
+
 let canRetry = computed(
     () =>
         !['cancelled', 'paused'].includes(props.run.status) &&
-        counts.value.failed > 0,
+        retryable.value > 0,
 );
 
 let cancelling = ref(false);
@@ -113,7 +124,7 @@ const cancelRun = () => {
                         variant="secondary"
                         :disabled="processing"
                     >
-                        Retry {{ counts.failed }} failed
+                        Retry {{ retryable }} failed
                     </Button>
                 </Form>
                 <Button

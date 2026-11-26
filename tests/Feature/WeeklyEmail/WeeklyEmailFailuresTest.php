@@ -3,6 +3,7 @@
 namespace Tests\Feature\WeeklyEmail;
 
 use App\Enums\TeamRole;
+use App\Mail\EmailSending;
 use App\Models\Team;
 use App\Models\User;
 use App\Modules\WeeklyEmail\Actions\RunState;
@@ -236,6 +237,112 @@ class WeeklyEmailFailuresTest extends TestCase
         $this->assertSame('cancelled', $delivery->fresh()->status);
         $this->assertStringContainsString('Wrong key.', $delivery->fresh()->error);
         Queue::assertNothingPushed();
+    }
+
+    public function test_retry_and_the_dashboard_leave_out_people_taken_off_the_list(): void
+    {
+        Queue::fake();
+        [$team, $owner] = $this->owner();
+        $run = $this->makeRun($team, 'completed');
+        $stillSubscribed = $this->delivery($run);
+        $suppressed = $this->delivery($run);
+        $bounced = $this->delivery($run);
+        $this->delivery($run)->update(['status' => 'sent']);
+        $stillSubscribed->update(['status' => 'failed']);
+        $suppressed->update(['status' => 'failed']);
+        $suppressed->recipient->update(['status' => 'suppressed', 'status_reason' => 'On the suppression list']);
+        $bounced->update(['status' => 'bounced']);
+        $bounced->recipient->update(['status' => 'bounced', 'status_reason' => 'No such user']);
+
+        $card = app(WeeklyEmailDashboard::class)->handle($team);
+        $titles = array_column($card['attention'], 'title');
+        $this->assertContains('1 weekly email failed to send', $titles);
+        $this->assertContains('2 people were taken off the email list', $titles);
+        $removed = collect($card['attention'])->firstWhere('title', '2 people were taken off the email list');
+        $this->assertSame('warning', $removed['tone']);
+        $this->assertSame('After the last send: 1 bounced, 1 refused by MailChannels. The reasons are on the email list.', $removed['detail']);
+
+        $this->actingAs($owner)
+            ->post(route('weekly-email.runs.retry', [$team->slug, $run]))
+            ->assertInertiaFlash('toast.message', 'Retrying 1 email.');
+
+        $this->assertSame('pending', $stillSubscribed->fresh()->status);
+        $this->assertSame('failed', $suppressed->fresh()->status);
+    }
+
+    public function test_retry_with_nobody_left_on_the_list_says_so(): void
+    {
+        [$team, $owner] = $this->owner();
+        $run = $this->makeRun($team, 'completed');
+        $delivery = $this->delivery($run);
+        $delivery->update(['status' => 'failed']);
+        $delivery->recipient->update(['status' => 'suppressed']);
+
+        $this->actingAs($owner)
+            ->post(route('weekly-email.runs.retry', [$team->slug, $run]))
+            ->assertInertiaFlash('toast.type', 'error');
+
+        $this->assertSame('failed', $delivery->fresh()->status);
+        $titles = array_column(app(WeeklyEmailDashboard::class)->handle($team)['attention'], 'title');
+        $this->assertNotContains('1 weekly email failed to send', $titles);
+    }
+
+    public function test_a_spam_complaint_makes_the_taken_off_item_urgent(): void
+    {
+        [$team] = $this->owner();
+        $run = $this->makeRun($team, 'completed');
+        $delivery = $this->delivery($run);
+        $delivery->update(['status' => 'sent']);
+        $delivery->recipient->update(['status' => 'complained']);
+
+        $card = app(WeeklyEmailDashboard::class)->handle($team);
+
+        $this->assertSame('1 person was taken off the email list', $card['attention'][0]['title']);
+        $this->assertSame('danger', $card['attention'][0]['tone']);
+        $this->assertStringContainsString('1 reported it as spam', $card['attention'][0]['detail']);
+    }
+
+    public function test_a_job_for_someone_taken_off_the_list_says_why_it_was_skipped(): void
+    {
+        Http::fake();
+        [$team] = $this->owner();
+        $run = $this->makeRun($team);
+        $delivery = $this->delivery($run);
+        $delivery->recipient->update(['status' => 'bounced']);
+
+        $this->send($delivery, $team);
+
+        $this->assertSame('cancelled', $delivery->fresh()->status);
+        $this->assertSame('The address bounced before this email went out.', $delivery->fresh()->error);
+        Http::assertNothingSent();
+    }
+
+    public function test_sending_is_rechecked_about_once_a_day_for_scheduled_congregations(): void
+    {
+        Http::fake(['api.mailchannels.net/tx/v1/check-domain' => Http::response(['check_results' => [
+            'dkim' => [['dkim_domain' => 'shul.example', 'dkim_selector' => 'cm202611', 'verdict' => 'passed']],
+            'spf' => ['verdict' => 'failed', 'reason' => 'No SPF record'],
+            'domain_lockdown' => ['verdict' => 'passed'],
+        ]])]);
+        [$scheduled] = $this->owner();
+        WeeklyEmailSetting::forTeam($scheduled)->update(['enabled' => true, 'send_day' => 5, 'send_time' => '09:00']);
+        [$notScheduled] = $this->owner();
+
+        $this->artisan('weekly-email:check-sending')->assertSuccessful();
+        Http::assertNothingSent();
+
+        $this->travel(25)->hours();
+        $this->artisan('weekly-email:check-sending')->assertSuccessful();
+        $this->artisan('weekly-email:check-sending')->assertSuccessful();
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request) => $request->header('X-Api-Key')[0] === 'congregation-key');
+        $this->assertFalse(EmailSending::ready($scheduled->fresh()));
+        $this->assertTrue($notScheduled->fresh()->domain_checked_at->lt(now()->subDay()));
+
+        $card = app(WeeklyEmailDashboard::class)->handle($scheduled->fresh());
+        $this->assertSame('The weekly email cannot send', $card['attention'][0]['title']);
+        $this->assertStringContainsString('the email due Friday, Nov 6 will not go out', $card['attention'][0]['detail']);
     }
 
     private function send(EmailDelivery $delivery, Team $team): void

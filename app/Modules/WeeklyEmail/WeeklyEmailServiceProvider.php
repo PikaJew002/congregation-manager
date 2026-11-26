@@ -4,6 +4,7 @@ namespace App\Modules\WeeklyEmail;
 
 use App\Http\Middleware\EnsureTeamMembership;
 use App\Mail\MailChannels\DeliveryEvent;
+use App\Modules\WeeklyEmail\Console\CheckEmailSending;
 use App\Modules\WeeklyEmail\Console\DispatchDueWeeklyEmails;
 use App\Modules\WeeklyEmail\Console\SendDueWeeklyEmails;
 use App\Modules\WeeklyEmail\Http\Controllers\UnsubscribeController;
@@ -26,7 +27,7 @@ class WeeklyEmailServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadMigrationsFrom(__DIR__.'/database/migrations');
-        $this->commands([DispatchDueWeeklyEmails::class, SendDueWeeklyEmails::class]);
+        $this->commands([CheckEmailSending::class, DispatchDueWeeklyEmails::class, SendDueWeeklyEmails::class]);
 
         Event::listen(DeliveryEvent::class, RecordDeliveryEvent::class);
 

@@ -43,7 +43,7 @@ The section walks through setup in order and shows the state of each step:
 4. **Check again.** Runs `check-domain` with the selector and stores the result. Each record shows passed or failed with MailChannels' reason.
 5. **Delivery events.** Recommended, not required. A Connect button enrolls the app's webhook on their account (see below).
 
-`updateSchedule` refuses `enabled = true` unless the last check passed all three. `DispatchWeeklyEmailRun` re-runs the check when it is older than 24 hours before creating a run, and skips the run with an attention item on the dashboard if it now fails.
+`updateSchedule` refuses `enabled = true` unless the last check passed all three. `DispatchWeeklyEmailRun` re-runs the check when it is older than 24 hours before creating a run, and skips the run with an attention item on the dashboard if it now fails. So a broken record shows before send day, `weekly-email:check-sending` runs hourly and re-checks every congregation with the schedule on, keeping the same 24-hour limit, so each is checked about once a day. The dashboard item names the send that will not go out.
 
 ## Building the mailer per congregation
 
@@ -80,7 +80,7 @@ MailChannels sends from its own shared servers, so receiving providers judge the
 - **Temporary errors** move the delivery later and let the send loop queue it again: 3 tries in all, 1 then 5 minutes apart, then the delivery is marked failed. "Sending too fast" also pushes every later delivery in the run back by 2 minutes.
 - **Account problems** pause the run (`status = paused`, `pause_reason` stored) and leave the remaining deliveries pending. The dashboard shows the reason with a link to Email sending in congregation settings. A Resume button on the run reschedules the pending deliveries from now at the same pace. A run still paused 24 hours after it was scheduled is cancelled, so last week's email does not go out days late.
 - **Rejected messages** fail that delivery only.
-- Retry on a run (existing button) reschedules failed deliveries through the same pacing instead of sending them all at once. It is refused while the run is paused; Resume handles that, after checking the account works.
+- Retry on a run (existing button) reschedules failed deliveries through the same pacing instead of sending them all at once. It only retries people still subscribed, since a bounced or suppressed address would fail again, and the button and the dashboard count only those. It is refused while the run is paused; Resume handles that, after checking the account works.
 
 ## Delivery events (webhooks)
 
@@ -137,7 +137,7 @@ Test sends use the congregation's mailer, so they double as a setup check. Limit
 3. Pacing: 5–15 second gaps, shuffle, daily limit, dropping `window_minutes`, and the per-minute send loop with per-team job middleware.
 4. Failure handling: error classes, retries, pause and resume.
 5. One app-wide webhook: signature verification, event handling, Connect in congregation settings, learning from suppression refusals, and the new recipient statuses on the Email list.
-6. Dashboard attention items for paused runs, failed domain checks and lists over the daily limit.
+6. Dashboard attention items for paused runs, failed domain checks and lists over the daily limit, plus people taken off the list after the last send (urgent when someone reported it as spam). Domain checks re-run daily for scheduled congregations; Retry and the failed count leave out people no longer subscribed.
 
 ## Open questions
 
