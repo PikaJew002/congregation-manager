@@ -47,7 +47,7 @@ type Props = {
     invitations: TeamInvitation[];
     permissions: TeamPermissions;
     availableRoles: RoleOption[];
-    modules: CongregationModule[];
+    congregationModules: CongregationModule[];
     emailSending: EmailSendingSettings | null;
 };
 
@@ -187,7 +187,7 @@ const toggleMemberModule = (
         </div>
 
         <div
-            v-if="permissions.canUpdateTeam && modules.length"
+            v-if="permissions.canUpdateTeam && congregationModules.length"
             class="space-y-6"
         >
             <Heading
@@ -197,14 +197,14 @@ const toggleMemberModule = (
             />
             <div class="space-y-3">
                 <label
-                    v-for="module in modules"
+                    v-for="module in congregationModules"
                     :key="module.key"
                     class="flex items-center justify-between rounded-lg border p-4"
                 >
                     <span>{{ module.name }}</span>
                     <Checkbox
-                        :checked="module.enabled"
-                        @update:checked="
+                        :model-value="module.enabled"
+                        @update:model-value="
                             (value: boolean | 'indeterminate') =>
                                 toggleCongregationModule(
                                     module.key,
@@ -276,20 +276,22 @@ const toggleMemberModule = (
                         v-if="
                             member.role === 'member' &&
                             permissions.canUpdateMember &&
-                            modules.length
+                            congregationModules.length
                         "
                         class="flex flex-wrap gap-3"
                     >
                         <label
-                            v-for="module in modules.filter(
+                            v-for="module in congregationModules.filter(
                                 (item) => item.enabled,
                             )"
                             :key="module.key"
                             class="flex items-center gap-2 text-sm"
                         >
                             <Checkbox
-                                :checked="member.modules?.includes(module.key)"
-                                @update:checked="
+                                :model-value="
+                                    member.modules?.includes(module.key)
+                                "
+                                @update:model-value="
                                     (value: boolean | 'indeterminate') =>
                                         toggleMemberModule(
                                             member,
@@ -452,7 +454,7 @@ const toggleMemberModule = (
         v-if="permissions.canCreateInvitation"
         :team="team"
         :available-roles="availableRoles"
-        :modules="modules"
+        :modules="congregationModules"
         :open="inviteDialogOpen"
         @update:open="inviteDialogOpen = $event"
     />

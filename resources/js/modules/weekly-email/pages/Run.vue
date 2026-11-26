@@ -241,6 +241,27 @@ const cancelRun = () => {
                                 >
                                     {{ delivery.error }}
                                 </p>
+                                <p
+                                    v-if="delivery.last_event === 'complained'"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    Reported as spam
+                                </p>
+                                <p
+                                    v-else-if="
+                                        delivery.last_event === 'unsubscribed'
+                                    "
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
+                                    Unsubscribed from this email
+                                </p>
+                                <p
+                                    v-else-if="delivery.delivered_at"
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
+                                    Delivered
+                                    {{ formatDateTime(delivery.delivered_at) }}
+                                </p>
                             </td>
                         </tr>
                     </tbody>

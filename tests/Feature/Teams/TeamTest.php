@@ -82,6 +82,22 @@ class TeamTest extends TestCase
             );
     }
 
+    public function test_the_team_edit_page_keeps_the_sidebar_navigation()
+    {
+        $user = User::factory()->create();
+        $team = Team::factory()->create();
+        $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+        $user->switchTeam($team);
+
+        // The page's module toggles must not replace the shared navigation,
+        // which the sidebar reads items from.
+        $this->actingAs($user)
+            ->get(route('teams.edit', $team))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('modules.0.items')
+                ->has('congregationModules.0.enabled'));
+    }
+
     public function test_teams_can_be_updated_by_owners()
     {
         $user = User::factory()->create();

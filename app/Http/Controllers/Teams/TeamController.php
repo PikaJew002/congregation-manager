@@ -67,7 +67,8 @@ class TeamController extends Controller
                 'isPersonal' => $team->is_personal,
                 'timezone' => $team->localTimezone(),
             ],
-            'modules' => $catalog,
+            // Not 'modules': that shared prop is the sidebar's navigation.
+            'congregationModules' => $catalog,
             'emailSending' => Gate::allows('update', $team) ? [
                 'hasApiKey' => filled($team->mailchannels_api_key),
                 'accountId' => $team->mailchannels_account_id,

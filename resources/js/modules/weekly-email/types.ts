@@ -61,6 +61,7 @@ export type EmailDelivery = {
     status: DeliveryStatus;
     attempts: number;
     delivered_at: string | null;
+    last_event: string | null;
     error: string | null;
     recipient: Pick<EmailRecipient, 'id' | 'email' | 'name' | 'status'> | null;
 };
