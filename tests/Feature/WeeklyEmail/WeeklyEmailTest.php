@@ -351,6 +351,51 @@ class WeeklyEmailTest extends TestCase
         $this->assertStringContainsString('MailChannels API key', $card['attention'][0]['detail']);
     }
 
+    public function test_someone_who_complained_is_not_put_back_on_the_list(): void
+    {
+        [$team, $owner] = $this->owner();
+        $recipient = EmailRecipient::query()->create([
+            'team_id' => $team->id,
+            'email' => 'a@example.com',
+            'status' => 'complained',
+            'status_reason' => 'Reported the weekly email as spam.',
+        ]);
+
+        $this->actingAs($owner)
+            ->patch(route('weekly-email.recipients.update', [$team->slug, $recipient]), ['name' => null, 'status' => 'subscribed'])
+            ->assertSessionHasErrors('status');
+
+        $this->actingAs($owner)
+            ->post(route('weekly-email.recipients.store', $team->slug), ['entries' => "a@example.com, Ann\nb@example.com"])
+            ->assertRedirect();
+
+        $this->post(route('weekly-email.unsubscribe.store', $recipient->unsubscribe_token));
+
+        $this->assertSame('complained', $recipient->fresh()->status);
+        $this->assertSame('Ann', $recipient->fresh()->name);
+        $this->assertSame('subscribed', EmailRecipient::query()->where('email', 'b@example.com')->value('status'));
+    }
+
+    public function test_a_bounced_address_can_be_resubscribed(): void
+    {
+        [$team, $owner] = $this->owner();
+        $recipient = EmailRecipient::query()->create([
+            'team_id' => $team->id,
+            'email' => 'a@example.com',
+            'status' => 'bounced',
+            'status_reason' => 'The address bounced.',
+            'soft_bounce_count' => 3,
+        ]);
+
+        $this->actingAs($owner)
+            ->patch(route('weekly-email.recipients.update', [$team->slug, $recipient]), ['name' => null, 'status' => 'subscribed'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('subscribed', $recipient->fresh()->status);
+        $this->assertNull($recipient->fresh()->status_reason);
+        $this->assertSame(0, $recipient->fresh()->soft_bounce_count);
+    }
+
     public function test_unsubscribe_link_opts_a_recipient_out(): void
     {
         [$team] = $this->owner();

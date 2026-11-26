@@ -19,12 +19,12 @@ class SendWeeklyEmailMessage
      * MailChannels account.
      *
      * @param  string  $campaign  Groups the messages of one send in MailChannels.
-     * @return string|null MailChannels' id for the message.
+     * @return array{message_id: string|null, request_id: string|null} MailChannels' ids for the message.
      *
      * @throws EmailSendingNotReady
      * @throws MailChannelsException
      */
-    public function handle(Team $team, WeeklyEmailSetting $settings, EmailRecipient $recipient, string $campaign): ?string
+    public function handle(Team $team, WeeklyEmailSetting $settings, EmailRecipient $recipient, string $campaign): array
     {
         $rendered = $this->renderer->handle($settings, $recipient);
 
@@ -47,6 +47,9 @@ class SendWeeklyEmailMessage
             }
         });
 
-        return $sent?->getMessageId();
+        return [
+            'message_id' => $sent?->getMessageId(),
+            'request_id' => $sent ? MailChannelsTransport::requestId($sent->getDebug()) : null,
+        ];
     }
 }

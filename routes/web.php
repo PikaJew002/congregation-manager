@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Teams\TeamInvitationController;
+use App\Http\Controllers\Webhooks\MailChannelsWebhookController;
 use App\Http\Middleware\EnsureTeamMembership;
 use Illuminate\Support\Facades\Route;
 
@@ -13,6 +14,10 @@ Route::prefix('{current_team}')
     ->group(function () {
         Route::get('dashboard', DashboardController::class)->name('dashboard');
     });
+
+Route::post('webhooks/mailchannels', MailChannelsWebhookController::class)
+    ->middleware('throttle:120,1')
+    ->name('webhooks.mailchannels');
 
 Route::get('invitations/{invitation}', [TeamInvitationController::class, 'show'])->name('invitations.show');
 

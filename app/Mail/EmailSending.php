@@ -118,6 +118,31 @@ class EmailSending
         ];
     }
 
+    /** The one webhook URL every MailChannels account should point at. */
+    public static function webhookUrl(): string
+    {
+        return route('webhooks.mailchannels');
+    }
+
+    /** Whether the congregation's account sends delivery events to this app. */
+    public static function deliveryEventsConnected(Team $team): bool
+    {
+        return filled($team->delivery_events_url) && $team->delivery_events_url === self::webhookUrl();
+    }
+
+    /**
+     * Point the congregation's account at the app's webhook, or learn where
+     * it already points.
+     *
+     * @throws MailChannelsException
+     */
+    public static function connectDeliveryEvents(Team $team): void
+    {
+        $url = (new MailChannelsApi((string) $team->mailchannels_api_key))->enrollWebhook(self::webhookUrl());
+
+        $team->forceFill(['delivery_events_url' => $url, 'delivery_events_checked_at' => now()])->save();
+    }
+
     private static function failedCheck(Team $team): ?string
     {
         $failed = collect(self::records($team))

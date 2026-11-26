@@ -53,10 +53,16 @@ class WeeklyEmailController extends Controller
                 continue;
             }
 
-            EmailRecipient::query()->updateOrCreate(
-                ['team_id' => $current_team->id, 'email' => Str::lower($email)],
-                ['name' => $name ?: null, 'status' => 'subscribed', 'unsubscribed_at' => null],
-            );
+            $recipient = EmailRecipient::query()->firstOrNew(['team_id' => $current_team->id, 'email' => Str::lower($email)]);
+            $recipient->name = $name ?: $recipient->name;
+
+            // Someone who reported the email as spam has to sign up again
+            // themselves; adding them back in bulk does not resubscribe them.
+            if ($recipient->status !== 'complained') {
+                $recipient->fill(['status' => 'subscribed', 'status_reason' => null, 'soft_bounce_count' => 0, 'unsubscribed_at' => null]);
+            }
+
+            $recipient->save();
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Recipients saved.')]);
@@ -73,9 +79,15 @@ class WeeklyEmailController extends Controller
             'status' => ['required', Rule::in(['subscribed', 'unsubscribed'])],
         ]);
 
+        if ($recipient->status === 'complained' && $data['status'] === 'subscribed') {
+            throw ValidationException::withMessages(['status' => __('This person reported the weekly email as spam. If they ask to get it again, remove them and add them again.')]);
+        }
+
         $recipient->update([
             'name' => $data['name'] ?? null,
             'status' => $data['status'],
+            'status_reason' => null,
+            'soft_bounce_count' => 0,
             'unsubscribed_at' => $data['status'] === 'unsubscribed' ? now() : null,
         ]);
 

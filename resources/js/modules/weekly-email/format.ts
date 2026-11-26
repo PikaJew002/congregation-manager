@@ -20,9 +20,12 @@ export function statusVariant(
             return 'default';
         case 'failed':
         case 'paused':
+        case 'bounced':
+        case 'complained':
             return 'destructive';
         case 'cancelled':
         case 'unsubscribed':
+        case 'suppressed':
             return 'outline';
         default:
             return 'secondary';

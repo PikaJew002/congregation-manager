@@ -134,6 +134,35 @@ class WeeklyEmailFailuresTest extends TestCase
         $this->assertSame('sending', $run->fresh()->status);
     }
 
+    public function test_a_suppression_refusal_takes_the_person_off_the_list(): void
+    {
+        Http::fake([self::SEND_URL => Http::response(['request_id' => 'req-1', 'results' => [['index' => 0, 'status' => 'failed', 'reason' => 'Recipient is on the suppression list']]], 202)]);
+        [$team] = $this->owner();
+        $run = $this->makeRun($team);
+        $delivery = $this->delivery($run);
+
+        $this->send($delivery, $team);
+
+        $this->assertSame('failed', $delivery->fresh()->status);
+        $this->assertSame('suppressed', $delivery->recipient->fresh()->status);
+        $this->assertStringContainsString('suppression list', $delivery->recipient->fresh()->status_reason);
+        $this->assertSame('completed', $run->fresh()->status);
+    }
+
+    public function test_a_sent_email_keeps_the_request_id_delivery_events_carry(): void
+    {
+        Http::fake([self::SEND_URL => Http::response(['request_id' => 'req-77', ...self::ACCEPTED], 202)]);
+        [$team] = $this->owner();
+        $run = $this->makeRun($team);
+        $delivery = $this->delivery($run);
+
+        $this->send($delivery, $team);
+
+        $this->assertSame('sent', $delivery->fresh()->status);
+        $this->assertSame('req-77', $delivery->fresh()->request_id);
+        $this->assertSame('mc-1', $delivery->fresh()->message_id);
+    }
+
     public function test_a_job_for_a_delivery_moved_later_waits_for_its_new_time(): void
     {
         Http::fake([self::SEND_URL => Http::response(self::ACCEPTED, 202)]);

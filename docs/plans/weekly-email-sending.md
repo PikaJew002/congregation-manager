@@ -23,15 +23,15 @@ A new **Email sending** section on the congregation settings page (`teams/Edit`)
 
 New columns on `teams`:
 
-| Column                              | Notes                                                                                                                                                                                                    |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mailchannels_api_key`              | `text`, cast `encrypted`, and in `$hidden` so it never reaches the browser through the shared team props. The page gets `has_mailchannels_api_key`. Same save/clear handling as the Zoom webhook secret. |
-| `mailchannels_account_id`           | Shown in the Domain Lockdown record the admin must publish. Entered by the admin (it is in the MailChannels dashboard footer).                                                                           |
-| `sending_domain`                    | Entered here. Weekly email's `from_address` must be on this domain; the template page validates it. Changing the domain clears the checks below.                                                         |
-| `dkim_selector`                     | Set when we create the managed key.                                                                                                                                                                      |
-| `domain_checked_at`, `domain_check` | `json` of the last `check-domain` result (DKIM, SPF, lockdown, sender domain verdicts and reasons).                                                                                                      |
-| `daily_email_limit`                 | The congregation's MailChannels plan limit per day. Defaults to 100, the free plan.                                                                                                                      |
-| `webhook_token`                     | Random 64 characters, identifies the congregation on incoming webhooks. Also `$hidden`.                                                                                                                  |
+| Column                                              | Notes                                                                                                                                                                                                    |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mailchannels_api_key`                              | `text`, cast `encrypted`, and in `$hidden` so it never reaches the browser through the shared team props. The page gets `has_mailchannels_api_key`. Same save/clear handling as the Zoom webhook secret. |
+| `mailchannels_account_id`                           | Shown in the Domain Lockdown record the admin must publish. Entered by the admin (it is in the MailChannels dashboard footer).                                                                           |
+| `sending_domain`                                    | Entered here. Weekly email's `from_address` must be on this domain; the template page validates it. Changing the domain clears the checks below.                                                         |
+| `dkim_selector`                                     | Set when we create the managed key.                                                                                                                                                                      |
+| `domain_checked_at`, `domain_check`                 | `json` of the last `check-domain` result (DKIM, SPF, lockdown, sender domain verdicts and reasons).                                                                                                      |
+| `daily_email_limit`                                 | The congregation's MailChannels plan limit per day. Defaults to 100, the free plan.                                                                                                                      |
+| `delivery_events_url`, `delivery_events_checked_at` | The webhook URL the account pointed at when last checked, and when. Delivery events are connected when it is ours.                                                                                       |
 
 The new columns are added through an `UpdateTeamEmailSendingRequest` rather than `SaveTeamRequest`, and are not in `Fillable`, so the general team update cannot touch them.
 
@@ -41,7 +41,7 @@ The section walks through setup in order and shows the state of each step:
 2. **DKIM.** A Create DKIM key button calls the dkim-keys endpoint with selector `cm{yyyymm}` and shows the TXT record (`<selector>._domainkey.<domain>`) to publish.
 3. **SPF and Domain Lockdown.** Shows the records to publish: `include:relay.mailchannels.net` in the domain's SPF record, and `_mailchannels.<domain> TXT "v=mc1 auth=<account id>"`.
 4. **Check again.** Runs `check-domain` with the selector and stores the result. Each record shows passed or failed with MailChannels' reason.
-5. **Delivery events.** An Enable button enrolls our webhook on their account (see below).
+5. **Delivery events.** Recommended, not required. A Connect button enrolls the app's webhook on their account (see below).
 
 `updateSchedule` refuses `enabled = true` unless the last check passed all three. `DispatchWeeklyEmailRun` re-runs the check when it is older than 24 hours before creating a run, and skips the run with an attention item on the dashboard if it now fails.
 
@@ -54,7 +54,7 @@ Weekly email stops using `Mail::mailer('mailchannels')`, which stays for platfor
 - Sends `transactional: false` and `campaign_id` (`weekly-{run id}`, or `test` for test sends).
 - Turns tracking off explicitly (`tracking_settings.click_tracking.enable` and `open_tracking.enable` false). Tracking pixels and rewritten links are a common marketing signal.
 - Keeps our own List-Unsubscribe headers, so MailChannels does not add its own.
-- Reads the 202 body and returns the per-message `message_id`, which `SendWeeklyEmailJob` stores on the delivery so webhooks can find it.
+- Reads the 202 body and returns the `request_id` and per-message `message_id`, which `SendWeeklyEmailJob` stores on the delivery so webhooks can find it.
 - Raises distinct exceptions: `MailChannelsRejected` (400, 413: this message is bad), `MailChannelsAccountProblem` (401, 403, "exceeded their daily limit", "Sending quota exceeded": nothing more will go through today), and `MailChannelsTemporary` (5xx, timeouts, "Sending too fast").
 
 ## Cadence
@@ -84,22 +84,28 @@ MailChannels sends from its own shared servers, so receiving providers judge the
 
 ## Delivery events (webhooks)
 
-MailChannels allows one webhook per account. Because the account is the congregation's, we enroll with their key: `POST /tx/v1/webhook?endpoint=<app url>/webhooks/mailchannels/{webhook_token}`. A 409 means their account already has a webhook pointing elsewhere; we show that and the URL they would need to replace it with, and sending still works without it.
+Delivery events are recommended, not required. A congregation that never connects them can still send; it only loses bounce and complaint handling (MailChannels' own suppression list still refuses list mail to addresses that hard-bounced or complained, and we learn from those refusals, below).
+
+**One webhook URL for the whole app.** MailChannels allows one webhook per account, and a platform and a congregation, or several congregations, may share an account. So every account points at the same `POST /webhooks/mailchannels`. Nothing in the URL says whose event it is: the signature proves it came from MailChannels, and each event is matched to its email by the send's `request_id`, which we store on every delivery (we send one recipient per request, so a request id names one delivery). Events that match no delivery, such as platform mail, are ignored for now.
+
+**Connecting.** The Email sending section shows whether delivery events are connected, with a Connect button. Connect calls `POST /tx/v1/webhook?endpoint=<our url>` with the congregation's key. 204 or 201 means connected. 409 means the account already has a webhook, so we read `GET /tx/v1/webhook`: if it is our URL, it is connected (another congregation or the platform on the same account already did it); otherwise we show the URL it points to and say that replacing it is up to them in MailChannels.
 
 The endpoint (already CSRF-exempt under `webhooks/*`):
 
-- Verifies the RFC 9421 signature: checks `Content-Digest` against the body, rebuilds the signature base from `Signature-Input`, fetches the ed25519 key from `GET /tx/v1/webhook/public-key?id=<keyid>` (cached a day), verifies with sodium, and rejects signatures older than 5 minutes.
-- Finds the congregation by token, then each event's delivery by `request_id` / message id and recipient email.
+- Verifies the RFC 9421 signature: checks `Content-Digest` (`sha-256=:<base64>:` of the raw body), reads the label, `created`, `keyid` and covered components from `Signature-Input` (MailChannels covers `content-digest`), rebuilds the signature base, and verifies the `Signature` with sodium against the ed25519 key from `GET /tx/v1/webhook/public-key?id=<keyid>` (PEM, cached a day). Signatures older than 5 minutes are refused. MailChannels' docs show the `@signature-params` line both with and without quotes, so both forms are tried.
+- Queues a job with the events and returns 200 at once.
 - Acts on events:
-    - `delivered`: `delivered_at` on the delivery.
-    - `hard-bounced`: delivery `bounced`; recipient `status = bounced`, no longer sent to.
+    - `delivered`: `delivered_at` on the delivery; the recipient's soft-bounce count resets.
+    - `hard-bounced`: delivery `bounced`; recipient `status = bounced` with MailChannels' reason, no longer sent to.
     - `complained`: recipient `status = complained`, no longer sent to. A complaint is the strongest negative signal there is.
     - `unsubscribed`: recipient unsubscribed, same as our own link.
-    - `soft-bounced`, `dropped`: recorded on the delivery; a recipient with soft bounces on 3 consecutive runs becomes `bounced`.
-    - `open`, `click`: ignored (tracking is off).
-- Returns 200 quickly; processing is a queued job so the webhook never times out.
+    - `soft-bounced`: recorded on the delivery; a recipient soft-bouncing on 3 runs in a row becomes `bounced`.
+    - `dropped`: recorded on the delivery with the reason.
+    - `processed`, `open`, `click`, `test`: ignored (tracking is off).
 
-Bounced and complained recipients show on the Email list with the reason. An admin can resubscribe a bounced address (they fixed a typo); a complained one needs the person to sign up again, so the admin can only delete it.
+**Learning from refusals.** When MailChannels refuses one email because the address is on its suppression list, the recipient becomes `suppressed` with the reason and is no longer scheduled. MailChannels does not document the wording of that refusal, so this matches on "suppress" in the reason; it needs checking against a real refusal.
+
+Bounced, complained and suppressed recipients show on the Email list with the reason. An admin can resubscribe a bounced or suppressed address (they fixed a typo, or the person asked); a complained one needs the person to sign up again, so the admin can only delete it, and adding the address again in bulk leaves it as it is.
 
 ## Test sends
 
@@ -110,8 +116,8 @@ Test sends use the congregation's mailer, so they double as a setup check. Limit
 - `teams`: the columns above.
 - `weekly_email_settings`: drop `window_minutes`.
 - `email_runs`: `paused` status, `pause_reason`, `paused_at`.
-- `email_deliveries`: `bounced` status; `queued_at`, `message_id`, `attempts`, `delivered_at`, `last_event`.
-- `email_recipients`: `bounced` and `complained` statuses, `status_reason`, `soft_bounce_count`.
+- `email_deliveries`: `bounced` status; `queued_at`, `request_id`, `message_id`, `attempts`, `delivered_at`, `last_event`.
+- `email_recipients`: `bounced`, `complained` and `suppressed` statuses, `status_reason`, `soft_bounce_count`.
 
 ## Tests
 
@@ -120,7 +126,9 @@ Test sends use the congregation's mailer, so they double as a setup check. Limit
 - Pacing: every gap is 5–15 seconds; recipients are shuffled; run refused over `daily_email_limit`; a run is still created when the scheduler catches up within 30 minutes, and not after.
 - Send loop: only deliveries due in the next minute are queued; one team's sends never overlap; the 10-a-minute ceiling holds per team with two teams sending at once.
 - Failures: temporary error retries then fails; account problem pauses the run and leaves the rest pending; resume reschedules from now; stale paused run is cancelled.
-- Webhooks: valid signature accepted; bad digest, bad signature, old signature and unknown token refused; each event updates delivery and recipient as described; bounced and complained recipients are skipped by the next run.
+- Webhooks: valid signature accepted; bad digest, bad signature, old signature and unknown key refused; events for unknown requests ignored; each event updates delivery and recipient as described; bounced, complained and suppressed recipients are skipped by the next run.
+- Connect: 204 connects; 409 with our URL counts as connected; 409 with another URL shows it.
+- Refusals: a suppression refusal marks the recipient suppressed; other refusals only fail the email.
 
 ## Order of work
 
@@ -128,7 +136,7 @@ Test sends use the congregation's mailer, so they double as a setup check. Limit
 2. Managed DKIM, `check-domain`, and the gate on enabling the schedule and creating runs.
 3. Pacing: 5–15 second gaps, shuffle, daily limit, dropping `window_minutes`, and the per-minute send loop with per-team job middleware.
 4. Failure handling: error classes, retries, pause and resume.
-5. Webhook enrollment, signature verification, and event handling, with the new recipient statuses on the Email list.
+5. One app-wide webhook: signature verification, event handling, Connect in congregation settings, learning from suppression refusals, and the new recipient statuses on the Email list.
 6. Dashboard attention items for paused runs, failed domain checks and lists over the daily limit.
 
 ## Open questions

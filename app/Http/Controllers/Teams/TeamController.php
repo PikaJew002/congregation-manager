@@ -77,6 +77,11 @@ class TeamController extends Controller
                 'checkedAt' => $team->domain_checked_at?->toISOString(),
                 'records' => EmailSending::records($team),
                 'problem' => EmailSending::problem($team),
+                'deliveryEvents' => [
+                    'connected' => EmailSending::deliveryEventsConnected($team),
+                    'url' => $team->delivery_events_url,
+                    'appUrl' => EmailSending::webhookUrl(),
+                ],
             ] : null,
             'members' => $team->members()->get()->map(function (User $member) use ($access, $team) {
                 /** @var Membership $membership */

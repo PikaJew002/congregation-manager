@@ -43,6 +43,8 @@ class TeamEmailSendingController extends Controller
         if ($keyChanged || $domainChanged) {
             $team->dkim_selector = null;
             $team->dkim_dns_record = null;
+            $team->delivery_events_url = null;
+            $team->delivery_events_checked_at = null;
             $team->domain_check = null;
             $team->domain_checked_at = null;
         }
@@ -116,6 +118,35 @@ class TeamEmailSendingController extends Controller
         Inertia::flash('toast', $problem === null
             ? ['type' => 'success', 'message' => __('Everything passes. The congregation is ready to send email.')]
             : ['type' => 'error', 'message' => $problem]);
+
+        return to_route('teams.edit', ['team' => $team->slug]);
+    }
+
+    /**
+     * Send the account's delivery events (bounces, complaints) to this app.
+     * Recommended, not required: sending works without them.
+     */
+    public function connectDeliveryEvents(Team $team): RedirectResponse
+    {
+        Gate::authorize('update', $team);
+
+        if (blank($team->mailchannels_api_key)) {
+            throw ValidationException::withMessages([
+                'delivery_events' => __('Save the MailChannels API key first.'),
+            ]);
+        }
+
+        try {
+            EmailSending::connectDeliveryEvents($team);
+        } catch (MailChannelsException $exception) {
+            throw ValidationException::withMessages([
+                'delivery_events' => __('MailChannels could not connect delivery events. (:detail)', ['detail' => $exception->getMessage()]),
+            ]);
+        }
+
+        Inertia::flash('toast', EmailSending::deliveryEventsConnected($team)
+            ? ['type' => 'success', 'message' => __('Delivery events are connected.')]
+            : ['type' => 'error', 'message' => __('The MailChannels account already sends delivery events to :url.', ['url' => $team->delivery_events_url])]);
 
         return to_route('teams.edit', ['team' => $team->slug]);
     }

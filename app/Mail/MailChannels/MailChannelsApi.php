@@ -79,6 +79,60 @@ class MailChannelsApi
         return self::dnsRecord((array) $response->json(), $domain, $selector);
     }
 
+    /**
+     * Point the account's delivery events at a URL. MailChannels keeps one
+     * webhook per account, so when the account already has one this returns
+     * the URL it points at instead of changing it.
+     *
+     * @return string The URL the account's delivery events now go to.
+     *
+     * @throws MailChannelsException
+     */
+    public function enrollWebhook(string $url): string
+    {
+        $response = $this->send(fn (PendingRequest $request) => $request->post(
+            self::BASE_URL.'/webhook?endpoint='.rawurlencode($url),
+        ));
+
+        if ($response->status() === 409) {
+            return $this->webhook() ?? $url;
+        }
+
+        if ($response->failed()) {
+            throw self::failure($response);
+        }
+
+        return $url;
+    }
+
+    /**
+     * The URL the account's delivery events go to, or null when there is none.
+     *
+     * @throws MailChannelsException
+     */
+    public function webhook(): ?string
+    {
+        $response = $this->send(fn (PendingRequest $request) => $request->get(self::BASE_URL.'/webhook'));
+
+        if ($response->failed()) {
+            throw self::failure($response);
+        }
+
+        $first = $response->json('0.webhook') ?? $response->json('webhook');
+
+        return is_string($first) && $first !== '' ? $first : null;
+    }
+
+    /**
+     * Whether MailChannels refused an email because the address is on its
+     * suppression list. The wording is not documented, so this is a guess to
+     * check against a real refusal.
+     */
+    public static function isSuppression(string $reason): bool
+    {
+        return Str::contains(Str::lower($reason), 'suppress');
+    }
+
     public static function request(string $apiKey): PendingRequest
     {
         return Http::withHeaders(['X-Api-Key' => $apiKey])->acceptJson()->asJson()->timeout(30);
@@ -99,6 +153,10 @@ class MailChannelsApi
 
         if (Str::contains($lower, ['daily limit', 'quota'])) {
             return new AccountProblem("The MailChannels sending limit is used up: {$detail}");
+        }
+
+        if (self::isSuppression($lower)) {
+            return new RecipientSuppressed("MailChannels will not send to this address: {$detail}");
         }
 
         return match (true) {

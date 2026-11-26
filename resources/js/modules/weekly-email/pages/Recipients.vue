@@ -103,7 +103,9 @@ const removeRecipient = (recipient: EmailRecipient) => {
                     <p class="text-sm text-muted-foreground">
                         One per line, as an email address, optionally followed
                         by a comma and a name. Existing addresses are updated
-                        and subscribed again. Invalid lines are skipped.
+                        and subscribed again, except people who reported the
+                        email as spam (remove them first if they ask to get it
+                        again). Invalid lines are skipped.
                     </p>
                     <InputError :message="errors.entries" />
                 </div>
@@ -162,6 +164,12 @@ const removeRecipient = (recipient: EmailRecipient) => {
                                     {{ recipient.status }}
                                 </Badge>
                                 <div
+                                    v-if="recipient.status_reason"
+                                    class="mt-1 max-w-xs text-xs break-words text-muted-foreground"
+                                >
+                                    {{ recipient.status_reason }}
+                                </div>
+                                <div
                                     v-if="recipient.unsubscribed_at"
                                     class="mt-1 text-xs text-muted-foreground"
                                 >
@@ -188,7 +196,9 @@ const removeRecipient = (recipient: EmailRecipient) => {
                                         Unsubscribe
                                     </Button>
                                     <Button
-                                        v-else
+                                        v-else-if="
+                                            recipient.status !== 'complained'
+                                        "
                                         variant="outline"
                                         size="sm"
                                         @click="

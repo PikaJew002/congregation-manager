@@ -5,6 +5,7 @@ namespace App\Modules\WeeklyEmail\Jobs;
 use App\Mail\MailChannels\AccountProblem;
 use App\Mail\MailChannels\EmailSendingNotReady;
 use App\Mail\MailChannels\MessageRejected;
+use App\Mail\MailChannels\RecipientSuppressed;
 use App\Mail\MailChannels\SendingTooFast;
 use App\Mail\MailChannels\TemporaryFailure;
 use App\Modules\WeeklyEmail\Actions\RunState;
@@ -99,7 +100,7 @@ class SendWeeklyEmailJob implements ShouldQueue
         $settings->body = $delivery->run->body;
 
         try {
-            $messageId = $sender->handle($delivery->run->team, $settings, $delivery->recipient, 'weekly-'.$delivery->run->id);
+            $ids = $sender->handle($delivery->run->team, $settings, $delivery->recipient, 'weekly-'.$delivery->run->id);
         } catch (EmailSendingNotReady|AccountProblem $exception) {
             // Nothing else will go through either: stop the run until someone
             // fixes the account, and leave this delivery pending.
@@ -108,6 +109,13 @@ class SendWeeklyEmailJob implements ShouldQueue
             return;
         } catch (TemporaryFailure $exception) {
             $this->retryLater($delivery, $exception, $state);
+
+            return;
+        } catch (RecipientSuppressed $exception) {
+            // MailChannels will refuse this address every week; stop scheduling it.
+            $delivery->recipient->update(['status' => 'suppressed', 'status_reason' => $exception->getMessage()]);
+            $delivery->update(['status' => 'failed', 'attempts' => $delivery->attempts + 1, 'error' => $exception->getMessage()]);
+            $this->refreshRun($delivery);
 
             return;
         } catch (Throwable $exception) {
@@ -126,7 +134,8 @@ class SendWeeklyEmailJob implements ShouldQueue
             'sent_at' => now(),
             'attempts' => $delivery->attempts + 1,
             'error' => null,
-            'message_id' => $messageId,
+            'message_id' => $ids['message_id'],
+            'request_id' => $ids['request_id'],
         ]);
         $this->refreshRun($delivery);
     }

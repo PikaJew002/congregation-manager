@@ -15,6 +15,8 @@ use Illuminate\Support\Str;
  * @property string $email
  * @property string|null $name
  * @property string $status
+ * @property string|null $status_reason
+ * @property int $soft_bounce_count
  * @property string $unsubscribe_token
  * @property CarbonImmutable|null $unsubscribed_at
  */
@@ -27,6 +29,8 @@ class EmailRecipient extends Model
         'email',
         'name',
         'status',
+        'status_reason',
+        'soft_bounce_count',
         'unsubscribe_token',
         'unsubscribed_at',
     ];

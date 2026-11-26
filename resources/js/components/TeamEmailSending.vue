@@ -18,6 +18,11 @@ export type EmailSendingSettings = {
     checkedAt: string | null;
     records: DnsRecord[];
     problem: string | null;
+    deliveryEvents: {
+        connected: boolean;
+        url: string | null;
+        appUrl: string;
+    };
 };
 
 export type DnsRecord = {
@@ -64,7 +69,7 @@ const undoClearKey = () => {
 
 const page = usePage();
 const errors = computed(() => page.props.errors as Record<string, string>);
-const busy = ref<'dkim' | 'check' | null>(null);
+const busy = ref<'dkim' | 'check' | 'delivery-events' | null>(null);
 const copied = ref<string | null>(null);
 
 const canSetUpDns = computed(
@@ -77,7 +82,7 @@ const checkedAt = computed(() =>
         : null,
 );
 
-const post = (action: 'dkim' | 'check') => {
+const post = (action: 'dkim' | 'check' | 'delivery-events') => {
     router.post(
         `/settings/teams/${props.teamSlug}/email-sending/${action}`,
         {},
@@ -339,6 +344,52 @@ const submit = () => {
                 </span>
             </div>
             <InputError :message="errors.check" />
+        </div>
+
+        <div v-if="settings.hasApiKey" class="space-y-3 rounded-lg border p-4">
+            <div class="flex items-center justify-between gap-2">
+                <span class="font-medium">Delivery events</span>
+                <Badge
+                    :variant="
+                        settings.deliveryEvents.connected
+                            ? 'default'
+                            : 'outline'
+                    "
+                >
+                    {{
+                        settings.deliveryEvents.connected
+                            ? 'Connected'
+                            : 'Not connected'
+                    }}
+                </Badge>
+            </div>
+            <p class="text-sm text-muted-foreground">
+                Recommended. MailChannels tells the app when an email bounces or
+                someone reports it as spam, so those addresses come off the
+                list. Email still sends without it.
+            </p>
+            <p
+                v-if="
+                    !settings.deliveryEvents.connected &&
+                    settings.deliveryEvents.url
+                "
+                class="text-sm"
+            >
+                This MailChannels account already sends its delivery events to
+                <code class="break-all">{{ settings.deliveryEvents.url }}</code
+                >. MailChannels allows one per account. To use this app instead,
+                remove that webhook in MailChannels, then connect again.
+            </p>
+            <Button
+                v-if="!settings.deliveryEvents.connected"
+                type="button"
+                variant="outline"
+                :disabled="busy !== null"
+                @click="post('delivery-events')"
+            >
+                Connect delivery events
+            </Button>
+            <InputError :message="errors.delivery_events" />
         </div>
     </div>
 </template>

@@ -1,10 +1,16 @@
-export type RecipientStatus = 'subscribed' | 'unsubscribed';
+export type RecipientStatus =
+    | 'subscribed'
+    | 'unsubscribed'
+    | 'bounced'
+    | 'complained'
+    | 'suppressed';
 
 export type EmailRecipient = {
     id: number;
     email: string;
     name: string | null;
     status: RecipientStatus;
+    status_reason: string | null;
     unsubscribed_at: string | null;
     created_at: string;
 };
@@ -41,7 +47,12 @@ export type EmailRun = {
     failed_count?: number;
 };
 
-export type DeliveryStatus = 'pending' | 'sent' | 'failed' | 'cancelled';
+export type DeliveryStatus =
+    | 'pending'
+    | 'sent'
+    | 'bounced'
+    | 'failed'
+    | 'cancelled';
 
 export type EmailDelivery = {
     id: number;
@@ -49,6 +60,7 @@ export type EmailDelivery = {
     sent_at: string | null;
     status: DeliveryStatus;
     attempts: number;
+    delivered_at: string | null;
     error: string | null;
     recipient: Pick<EmailRecipient, 'id' | 'email' | 'name'> | null;
 };

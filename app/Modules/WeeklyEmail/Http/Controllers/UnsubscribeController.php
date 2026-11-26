@@ -18,17 +18,20 @@ class UnsubscribeController extends Controller
         return Inertia::render('weekly-email/Unsubscribe', [
             'token' => $token,
             'email' => $recipient->email,
-            'unsubscribed' => $recipient->status === 'unsubscribed',
+            'unsubscribed' => $recipient->status !== 'subscribed',
         ]);
     }
 
     public function store(Request $request, string $token): RedirectResponse
     {
         $recipient = EmailRecipient::query()->where('unsubscribe_token', $token)->firstOrFail();
-        $recipient->update([
-            'status' => 'unsubscribed',
-            'unsubscribed_at' => now(),
-        ]);
+        // Someone who complained is already off the list; keep that record.
+        if ($recipient->status !== 'complained') {
+            $recipient->update([
+                'status' => 'unsubscribed',
+                'unsubscribed_at' => now(),
+            ]);
+        }
 
         return back();
     }

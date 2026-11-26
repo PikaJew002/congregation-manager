@@ -31,6 +31,8 @@ use Illuminate\Support\Str;
  * @property array<string, mixed>|null $domain_check
  * @property CarbonImmutable|null $domain_checked_at
  * @property int $daily_email_limit
+ * @property string|null $delivery_events_url
+ * @property CarbonImmutable|null $delivery_events_checked_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -189,6 +191,7 @@ class Team extends Model
             'domain_check' => 'array',
             'domain_checked_at' => 'datetime',
             'daily_email_limit' => 'integer',
+            'delivery_events_checked_at' => 'datetime',
         ];
     }
 

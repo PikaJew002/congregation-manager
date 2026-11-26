@@ -16,6 +16,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $status
  * @property int $attempts
  * @property string|null $message_id
+ * @property string|null $request_id
+ * @property CarbonImmutable|null $delivered_at
+ * @property string|null $last_event
  * @property string|null $error
  * @property-read EmailRun $run
  * @property-read EmailRecipient|null $recipient
@@ -31,6 +34,9 @@ class EmailDelivery extends Model
         'status',
         'attempts',
         'message_id',
+        'request_id',
+        'delivered_at',
+        'last_event',
         'error',
     ];
 
@@ -40,6 +46,7 @@ class EmailDelivery extends Model
             'scheduled_at' => 'datetime',
             'queued_at' => 'datetime',
             'sent_at' => 'datetime',
+            'delivered_at' => 'datetime',
         ];
     }
 

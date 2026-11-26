@@ -4,6 +4,7 @@ namespace App\Mail\Transport;
 
 use App\Mail\MailChannels\MailChannelsApi;
 use App\Mail\MailChannels\MessageRejected;
+use App\Mail\MailChannels\RecipientSuppressed;
 use App\Mail\MailChannels\TemporaryFailure;
 use Illuminate\Http\Client\ConnectionException;
 use Symfony\Component\Mailer\Exception\TransportException;
@@ -25,6 +26,15 @@ class MailChannelsTransport extends AbstractTransport
 {
     /** Header a message can set to name its campaign. Stripped before sending. */
     public const CAMPAIGN_HEADER = 'X-MailChannels-Campaign';
+
+    /** How the send's request id, which delivery events carry, is passed back in the sent message's debug log. */
+    public const REQUEST_ID_PREFIX = 'MailChannels request_id: ';
+
+    /** The request id MailChannels gave a sent message, if any. */
+    public static function requestId(string $debug): ?string
+    {
+        return preg_match('/^'.preg_quote(self::REQUEST_ID_PREFIX, '/').'(\S+)$/m', $debug, $match) === 1 ? $match[1] : null;
+    }
 
     /**
      * @param  array{domain?: string|null, selector?: string|null, private_key?: string|null}  $dkim
@@ -127,7 +137,17 @@ class MailChannelsTransport extends AbstractTransport
         $result = $response->json('results.0');
 
         if (is_array($result) && ($result['status'] ?? null) === 'failed') {
-            throw new MessageRejected('MailChannels rejected the message: '.($result['reason'] ?? 'no reason given'));
+            $reason = (string) ($result['reason'] ?? 'no reason given');
+
+            throw MailChannelsApi::isSuppression($reason)
+                ? new RecipientSuppressed('MailChannels will not send to this address: '.$reason)
+                : new MessageRejected('MailChannels rejected the message: '.$reason);
+        }
+
+        $requestId = $response->json('request_id');
+
+        if (filled($requestId)) {
+            $message->appendDebug(self::REQUEST_ID_PREFIX.$requestId."\n");
         }
 
         if (is_array($result) && filled($result['message_id'] ?? null)) {

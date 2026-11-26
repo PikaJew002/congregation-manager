@@ -36,7 +36,7 @@ const page = usePage();
 let teamSlug = computed(() => page.props.currentTeam?.slug ?? '');
 
 let counts = computed(() => {
-    const result = { pending: 0, sent: 0, failed: 0, cancelled: 0 };
+    const result = { pending: 0, sent: 0, bounced: 0, failed: 0, cancelled: 0 };
 
     for (const delivery of props.deliveries) {
         result[delivery.status]++;
