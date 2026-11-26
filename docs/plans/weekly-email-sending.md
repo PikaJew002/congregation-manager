@@ -72,7 +72,7 @@ MailChannels sends from its own shared servers, so receiving providers judge the
 **Who drives the clock.** Today each delivery is a delayed job queued when the run starts. That cannot be paused or stopped cleanly once queued. Instead:
 
 - The run stores each delivery's `scheduled_at` as today, but queues nothing up front.
-- `weekly-email:send-due` runs every minute (with `withoutOverlapping`). For each run in `scheduled` or `sending`, it queues `SendWeeklyEmailJob` for deliveries with `scheduled_at` in the coming minute, delayed to the second, and marks them `queued`.
+- `weekly-email:send-due` runs every minute (with `withoutOverlapping`). For each run in `scheduled` or `sending`, it queues `SendWeeklyEmailJob` for deliveries with `scheduled_at` in the coming minute, delayed to the second, and sets their `queued_at` (they stay `pending`, so the run pages are unchanged). A delivery queued more than 15 minutes ago and still pending is queued again, in case a job was lost.
 - `SendWeeklyEmailJob` uses `WithoutOverlapping` keyed by team, so one congregation's sends stay serial however the queue is scaled, and `RateLimited` keyed by team at 10 a minute as a safety ceiling well above the normal pace.
 
 ## Failures
@@ -110,7 +110,7 @@ Test sends use the congregation's mailer, so they double as a setup check. Limit
 - `teams`: the columns above.
 - `weekly_email_settings`: drop `window_minutes`.
 - `email_runs`: `paused` status, `pause_reason`, `paused_at`.
-- `email_deliveries`: `queued`, `bounced` statuses; `message_id`, `attempts`, `delivered_at`, `last_event`.
+- `email_deliveries`: `bounced` status; `queued_at`, `message_id`, `attempts`, `delivered_at`, `last_event`.
 - `email_recipients`: `bounced` and `complained` statuses, `status_reason`, `soft_bounce_count`.
 
 ## Tests

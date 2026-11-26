@@ -8,13 +8,13 @@ use App\Mail\EmailSending;
 use App\Mail\MailChannels\EmailSendingNotReady;
 use App\Mail\MailChannels\MailChannelsException;
 use App\Models\Team;
+use App\Modules\WeeklyEmail\Actions\PaceDeliveries;
 use App\Modules\WeeklyEmail\Actions\RenderWeeklyEmail;
 use App\Modules\WeeklyEmail\Actions\SendWeeklyEmailMessage;
-use App\Modules\WeeklyEmail\Jobs\SendWeeklyEmailJob;
-use App\Modules\WeeklyEmail\Models\EmailDelivery;
 use App\Modules\WeeklyEmail\Models\EmailRecipient;
 use App\Modules\WeeklyEmail\Models\EmailRun;
 use App\Modules\WeeklyEmail\Models\WeeklyEmailSetting;
+use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -168,9 +168,14 @@ class WeeklyEmailController extends Controller
 
     public function schedule(Team $current_team): Response
     {
+        $subscribers = EmailRecipient::query()->forTeam($current_team)->where('status', 'subscribed')->count();
+
         return Inertia::render('weekly-email/Schedule', [
             'settings' => WeeklyEmailSetting::forTeam($current_team),
             'sendingProblem' => EmailSending::problem($current_team),
+            'subscribers' => $subscribers,
+            'estimatedMinutes' => PaceDeliveries::estimatedMinutes($subscribers),
+            'dailyEmailLimit' => $current_team->daily_email_limit,
         ]);
     }
 
@@ -180,7 +185,6 @@ class WeeklyEmailController extends Controller
             'enabled' => ['required', 'boolean'],
             'send_day' => ['required', 'integer', 'between:0,6'],
             'send_time' => ['required', 'date_format:H:i'],
-            'window_minutes' => ['required', 'integer', 'between:30,240'],
         ]);
 
         if ($data['enabled'] && ($problem = EmailSending::problem($current_team)) !== null) {
@@ -224,19 +228,27 @@ class WeeklyEmailController extends Controller
         return back();
     }
 
-    public function retryRun(Team $current_team, EmailRun $run): RedirectResponse
+    public function retryRun(Team $current_team, EmailRun $run, PaceDeliveries $pace): RedirectResponse
     {
         abort_unless($run->team_id === $current_team->id, 404);
         abort_if($run->status === 'cancelled', 422);
 
-        if ($run->deliveries()->where('status', 'failed')->exists()) {
-            $run->update(['status' => 'sending']);
+        $failed = $run->deliveries()->where('status', 'failed')->orderBy('scheduled_at')->get();
+
+        if ($failed->isEmpty()) {
+            return back();
         }
 
-        $run->deliveries()->where('status', 'failed')->each(function (EmailDelivery $delivery) {
-            $delivery->update(['status' => 'pending', 'error' => null]);
-            SendWeeklyEmailJob::dispatch($delivery->id);
-        });
+        // Retries go out at the same pace as the first send, starting now.
+        $times = $pace->times(CarbonImmutable::now()->utc(), $failed->count());
+
+        foreach ($failed->values() as $index => $delivery) {
+            $delivery->update(['status' => 'pending', 'error' => null, 'queued_at' => null, 'scheduled_at' => $times[$index]]);
+        }
+
+        $run->update(['status' => 'sending']);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => trans_choice('Retrying :count email.|Retrying :count emails.', $failed->count())]);
 
         return back();
     }

@@ -18,6 +18,9 @@ import type { WeeklyEmailSettings } from '../types';
 const props = defineProps<{
     settings: WeeklyEmailSettings;
     sendingProblem: string | null;
+    subscribers: number;
+    estimatedMinutes: number;
+    dailyEmailLimit: number;
 }>();
 
 defineOptions({
@@ -39,23 +42,24 @@ let form = useForm({
     enabled: props.settings.enabled,
     send_day: Number(props.settings.send_day),
     send_time: props.settings.send_time.slice(0, 5),
-    window_minutes: Number(props.settings.window_minutes),
 });
 
-let windowLabel = computed(() => {
-    const minutes = Number(form.window_minutes) || 0;
-    const hours = Math.floor(minutes / 60);
-    const rest = minutes % 60;
+let duration = computed(() => {
+    if (props.subscribers <= 1) {
+        return 'goes out right away';
+    }
 
-    return [hours ? `${hours}h` : '', rest ? `${rest}m` : '']
-        .filter(Boolean)
-        .join(' ');
+    const minutes = Math.max(props.estimatedMinutes, 1);
+
+    return `goes to ${props.subscribers} people one at a time, a few seconds apart, and takes about ${minutes} minute${minutes === 1 ? '' : 's'}`;
 });
 
 let summary = computed(
     () =>
-        `Every ${weekdays[form.send_day]}, sending starts at ${form.send_time} (${page.props.currentTeam?.timezone ?? 'America/New_York'}) and is spread over ${windowLabel.value || '0m'}.`,
+        `Every ${weekdays[form.send_day]} at ${form.send_time} (${page.props.currentTeam?.timezone ?? 'America/New_York'}), the email ${duration.value}.`,
 );
+
+let overLimit = computed(() => props.subscribers > props.dailyEmailLimit);
 
 const selectClass =
     'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30';
@@ -133,7 +137,7 @@ const submit = () => {
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="send_time">Start time</Label>
+                    <Label for="send_time">Send time</Label>
                     <Input
                         id="send_time"
                         v-model="form.send_time"
@@ -146,28 +150,21 @@ const submit = () => {
                 <CongregationTimezone
                     usage="The send time is in this time zone."
                 />
-
-                <div class="grid gap-2">
-                    <Label for="window_minutes">Send window (minutes)</Label>
-                    <Input
-                        id="window_minutes"
-                        v-model.number="form.window_minutes"
-                        type="number"
-                        min="30"
-                        max="240"
-                        step="5"
-                        required
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        30 to 240. Emails are spaced out across this window.
-                    </p>
-                    <InputError :message="form.errors.window_minutes" />
-                </div>
             </div>
 
             <p class="rounded-lg bg-muted/40 p-4 text-sm">
                 <template v-if="form.enabled">{{ summary }}</template>
                 <template v-else>Weekly sending is off.</template>
+            </p>
+
+            <p
+                v-if="overLimit"
+                class="rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-700 dark:border-red-200/10 dark:bg-red-700/10 dark:text-red-100"
+            >
+                The list has {{ subscribers }} subscribers, but the
+                congregation's MailChannels plan allows {{ dailyEmailLimit }}
+                emails a day. The weekly email will not go out until the limit
+                is raised in the congregation settings.
             </p>
 
             <div class="flex items-center gap-4">

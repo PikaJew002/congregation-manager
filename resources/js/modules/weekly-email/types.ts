@@ -19,7 +19,6 @@ export type WeeklyEmailSettings = {
     reply_to: string | null;
     send_day: number;
     send_time: string;
-    window_minutes: number;
 };
 
 export type RunStatus = 'scheduled' | 'sending' | 'completed' | 'cancelled';

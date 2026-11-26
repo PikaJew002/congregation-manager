@@ -62,6 +62,15 @@ class WeeklyEmailDashboard
             ];
         }
 
+        if ($settings?->enabled && $subscribers > $team->daily_email_limit) {
+            $attention[] = [
+                'title' => 'The email list is over the daily sending limit',
+                'detail' => "{$subscribers} subscribers, but the MailChannels plan allows {$team->daily_email_limit} a day. The weekly email will not go out until the limit is raised.",
+                'href' => route('teams.edit', $team->slug),
+                'tone' => 'danger',
+            ];
+        }
+
         if ($settings?->enabled && $subscribers === 0) {
             $attention[] = [
                 'title' => 'The weekly email has no subscribers',
@@ -109,8 +118,8 @@ class WeeklyEmailDashboard
     }
 
     /**
-     * The next start of the send window, in the congregation's time zone.
-     * Once today's window has opened, the next one is a week later.
+     * The next send time, in the congregation's time zone. Once today's has
+     * passed, the next one is a week later.
      */
     public function nextSend(WeeklyEmailSetting $settings, Team $team, ?CarbonImmutable $now = null): CarbonImmutable
     {

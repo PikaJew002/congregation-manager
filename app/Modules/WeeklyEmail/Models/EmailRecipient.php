@@ -4,10 +4,20 @@ namespace App\Modules\WeeklyEmail\Models;
 
 use App\Models\Concerns\BelongsToTeam;
 use App\Models\Team;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
+/**
+ * @property int $id
+ * @property int $team_id
+ * @property string $email
+ * @property string|null $name
+ * @property string $status
+ * @property string $unsubscribe_token
+ * @property CarbonImmutable|null $unsubscribed_at
+ */
 class EmailRecipient extends Model
 {
     use BelongsToTeam;

@@ -92,7 +92,8 @@ class WeeklyEmailTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('settings.send_time', '09:00')
-                ->where('settings.window_minutes', 150)
+                ->missing('settings.window_minutes')
+                ->where('subscribers', 0)
                 ->where('settings.subject', 'This week on Zoom'));
     }
 
@@ -228,7 +229,6 @@ class WeeklyEmailTest extends TestCase
             'enabled' => true,
             'send_day' => CarbonImmutable::parse('2026-11-01 09:05', 'America/New_York')->dayOfWeek,
             'send_time' => '09:00',
-            'window_minutes' => 120,
             'zoom_link' => 'https://zoom.example/j/1',
         ]);
         EmailRecipient::query()->create(['team_id' => $team->id, 'email' => 'a@example.com', 'status' => 'subscribed']);
@@ -253,7 +253,6 @@ class WeeklyEmailTest extends TestCase
             'enabled' => true,
             'send_day' => CarbonImmutable::parse('2026-11-01', 'America/Los_Angeles')->dayOfWeek,
             'send_time' => '09:00',
-            'window_minutes' => 60,
         ]);
 
         // 9:05 in New York is 6:05 in Los Angeles: not yet.
@@ -322,7 +321,7 @@ class WeeklyEmailTest extends TestCase
     public function test_the_schedule_cannot_be_turned_on_until_sending_is_set_up(): void
     {
         [$team, $owner] = $this->owner();
-        $schedule = ['enabled' => true, 'send_day' => 0, 'send_time' => '09:00', 'window_minutes' => 60];
+        $schedule = ['enabled' => true, 'send_day' => 0, 'send_time' => '09:00'];
 
         $this->actingAs($owner)
             ->put(route('weekly-email.schedule.update', $team->slug), $schedule)
@@ -373,7 +372,6 @@ class WeeklyEmailTest extends TestCase
             'enabled' => true,
             'send_day' => CarbonImmutable::parse('2026-11-01', 'America/New_York')->dayOfWeek,
             'send_time' => '09:00',
-            'window_minutes' => 60,
         ]);
     }
 
