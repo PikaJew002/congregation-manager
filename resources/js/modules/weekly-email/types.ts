@@ -1,10 +1,16 @@
-export type RecipientStatus = 'subscribed' | 'unsubscribed';
+export type RecipientStatus =
+    | 'subscribed'
+    | 'unsubscribed'
+    | 'bounced'
+    | 'complained'
+    | 'suppressed';
 
 export type EmailRecipient = {
     id: number;
     email: string;
     name: string | null;
     status: RecipientStatus;
+    status_reason: string | null;
     unsubscribed_at: string | null;
     created_at: string;
 };
@@ -19,15 +25,21 @@ export type WeeklyEmailSettings = {
     reply_to: string | null;
     send_day: number;
     send_time: string;
-    window_minutes: number;
 };
 
-export type RunStatus = 'scheduled' | 'sending' | 'completed' | 'cancelled';
+export type RunStatus =
+    | 'scheduled'
+    | 'sending'
+    | 'paused'
+    | 'completed'
+    | 'cancelled';
 
 export type EmailRun = {
     id: number;
     scheduled_for: string;
     status: RunStatus;
+    pause_reason: string | null;
+    paused_at: string | null;
     subject: string;
     body: string;
     deliveries_count?: number;
@@ -35,13 +47,21 @@ export type EmailRun = {
     failed_count?: number;
 };
 
-export type DeliveryStatus = 'pending' | 'sent' | 'failed' | 'cancelled';
+export type DeliveryStatus =
+    | 'pending'
+    | 'sent'
+    | 'bounced'
+    | 'failed'
+    | 'cancelled';
 
 export type EmailDelivery = {
     id: number;
     scheduled_at: string;
     sent_at: string | null;
     status: DeliveryStatus;
+    attempts: number;
+    delivered_at: string | null;
+    last_event: string | null;
     error: string | null;
-    recipient: Pick<EmailRecipient, 'id' | 'email' | 'name'> | null;
+    recipient: Pick<EmailRecipient, 'id' | 'email' | 'name' | 'status'> | null;
 };

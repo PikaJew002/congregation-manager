@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Teams\TeamController;
+use App\Http\Controllers\Teams\TeamEmailSendingController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\Teams\TeamMemberController;
 use App\Http\Controllers\Teams\TeamModuleController;
@@ -45,6 +46,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('settings/teams/{team}/members/{user}/modules', [TeamMemberController::class, 'updateModule'])->name('teams.members.modules.update');
 
         Route::patch('settings/teams/{team}/modules', [TeamModuleController::class, 'update'])->name('teams.modules.update');
+        Route::patch('settings/teams/{team}/email-sending', [TeamEmailSendingController::class, 'update'])->name('teams.email-sending.update');
+        Route::post('settings/teams/{team}/email-sending/dkim', [TeamEmailSendingController::class, 'createDkim'])->middleware('throttle:6,1')->name('teams.email-sending.dkim');
+        Route::post('settings/teams/{team}/email-sending/check', [TeamEmailSendingController::class, 'check'])->middleware('throttle:6,1')->name('teams.email-sending.check');
+        Route::post('settings/teams/{team}/email-sending/delivery-events', [TeamEmailSendingController::class, 'connectDeliveryEvents'])->middleware('throttle:6,1')->name('teams.email-sending.delivery-events');
 
         Route::post('settings/teams/{team}/invitations', [TeamInvitationController::class, 'store'])->name('teams.invitations.store');
         Route::post('settings/teams/{team}/invitations/{invitation}/resend', [TeamInvitationController::class, 'resend'])->name('teams.invitations.resend');

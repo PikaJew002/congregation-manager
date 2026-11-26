@@ -4,10 +4,23 @@ namespace App\Modules\WeeklyEmail\Models;
 
 use App\Models\Concerns\BelongsToTeam;
 use App\Models\Team;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
+/**
+ * @property int $id
+ * @property int $team_id
+ * @property string $email
+ * @property string|null $name
+ * @property string $status
+ * @property string|null $status_reason
+ * @property int $soft_bounce_count
+ * @property string $unsubscribe_token
+ * @property CarbonImmutable|null $unsubscribed_at
+ */
 class EmailRecipient extends Model
 {
     use BelongsToTeam;
@@ -17,6 +30,8 @@ class EmailRecipient extends Model
         'email',
         'name',
         'status',
+        'status_reason',
+        'soft_bounce_count',
         'unsubscribe_token',
         'unsubscribed_at',
     ];
@@ -35,9 +50,20 @@ class EmailRecipient extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<Team, $this>
+     */
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
+    }
+
+    /**
+     * @return HasMany<EmailDelivery, $this>
+     */
+    public function deliveries(): HasMany
+    {
+        return $this->hasMany(EmailDelivery::class);
     }
 
     public function unsubscribeUrl(): string

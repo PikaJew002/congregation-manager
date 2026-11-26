@@ -19,7 +19,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $reply_to
  * @property int $send_day
  * @property string $send_time
- * @property int $window_minutes
  */
 class WeeklyEmailSetting extends Model
 {
@@ -36,7 +35,6 @@ class WeeklyEmailSetting extends Model
         'reply_to',
         'send_day',
         'send_time',
-        'window_minutes',
     ];
 
     protected function casts(): array
@@ -46,6 +44,9 @@ class WeeklyEmailSetting extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Team, $this>
+     */
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);

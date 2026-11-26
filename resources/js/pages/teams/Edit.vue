@@ -8,6 +8,8 @@ import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import InviteMemberModal from '@/components/InviteMemberModal.vue';
 import RemoveMemberModal from '@/components/RemoveMemberModal.vue';
+import TeamEmailSending from '@/components/TeamEmailSending.vue';
+import type { EmailSendingSettings } from '@/components/TeamEmailSending.vue';
 import TimezoneSelect from '@/components/TimezoneSelect.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +47,8 @@ type Props = {
     invitations: TeamInvitation[];
     permissions: TeamPermissions;
     availableRoles: RoleOption[];
-    modules: CongregationModule[];
+    congregationModules: CongregationModule[];
+    emailSending: EmailSendingSettings | null;
 };
 
 const props = defineProps<Props>();
@@ -184,7 +187,7 @@ const toggleMemberModule = (
         </div>
 
         <div
-            v-if="permissions.canUpdateTeam && modules.length"
+            v-if="permissions.canUpdateTeam && congregationModules.length"
             class="space-y-6"
         >
             <Heading
@@ -194,14 +197,14 @@ const toggleMemberModule = (
             />
             <div class="space-y-3">
                 <label
-                    v-for="module in modules"
+                    v-for="module in congregationModules"
                     :key="module.key"
                     class="flex items-center justify-between rounded-lg border p-4"
                 >
                     <span>{{ module.name }}</span>
                     <Checkbox
-                        :checked="module.enabled"
-                        @update:checked="
+                        :model-value="module.enabled"
+                        @update:model-value="
                             (value: boolean | 'indeterminate') =>
                                 toggleCongregationModule(
                                     module.key,
@@ -212,6 +215,12 @@ const toggleMemberModule = (
                 </label>
             </div>
         </div>
+
+        <TeamEmailSending
+            v-if="permissions.canUpdateTeam && emailSending"
+            :team-slug="team.slug"
+            :settings="emailSending"
+        />
 
         <!-- Members Section -->
         <div class="space-y-6">
@@ -267,20 +276,22 @@ const toggleMemberModule = (
                         v-if="
                             member.role === 'member' &&
                             permissions.canUpdateMember &&
-                            modules.length
+                            congregationModules.length
                         "
                         class="flex flex-wrap gap-3"
                     >
                         <label
-                            v-for="module in modules.filter(
+                            v-for="module in congregationModules.filter(
                                 (item) => item.enabled,
                             )"
                             :key="module.key"
                             class="flex items-center gap-2 text-sm"
                         >
                             <Checkbox
-                                :checked="member.modules?.includes(module.key)"
-                                @update:checked="
+                                :model-value="
+                                    member.modules?.includes(module.key)
+                                "
+                                @update:model-value="
                                     (value: boolean | 'indeterminate') =>
                                         toggleMemberModule(
                                             member,
@@ -443,7 +454,7 @@ const toggleMemberModule = (
         v-if="permissions.canCreateInvitation"
         :team="team"
         :available-roles="availableRoles"
-        :modules="modules"
+        :modules="congregationModules"
         :open="inviteDialogOpen"
         @update:open="inviteDialogOpen = $event"
     />

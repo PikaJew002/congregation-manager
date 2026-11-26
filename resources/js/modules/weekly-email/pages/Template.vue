@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, useForm, usePage } from '@inertiajs/vue3';
+import { Form, Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { watchDebounced } from '@vueuse/core';
 import { computed, onMounted, ref } from 'vue';
 import Heading from '@/components/Heading.vue';
@@ -7,6 +7,7 @@ import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { edit as editTeam } from '@/routes/teams';
 import { template as templateRoute } from '@/routes/weekly-email';
 import { preview, test, update } from '@/routes/weekly-email/template';
 import type { Team } from '@/types';
@@ -14,6 +15,8 @@ import type { WeeklyEmailSettings } from '../types';
 
 const props = defineProps<{
     settings: WeeklyEmailSettings;
+    sendingProblem: string | null;
+    sendingDomain: string | null;
 }>();
 
 defineOptions({
@@ -145,6 +148,12 @@ const submit = () => {
                                 type="email"
                                 required
                             />
+                            <p
+                                v-if="sendingDomain"
+                                class="text-xs text-muted-foreground"
+                            >
+                                Must end in @{{ sendingDomain }}.
+                            </p>
                             <InputError :message="form.errors.from_address" />
                         </div>
 
@@ -267,13 +276,27 @@ const submit = () => {
                         <Button
                             type="submit"
                             variant="secondary"
-                            :disabled="processing || form.isDirty"
+                            :disabled="
+                                processing || form.isDirty || !!sendingProblem
+                            "
                         >
                             Send test email
                         </Button>
                     </Form>
                     <p
-                        v-if="form.isDirty"
+                        v-if="sendingProblem"
+                        class="text-xs text-muted-foreground"
+                    >
+                        {{ sendingProblem }}
+                        <Link
+                            v-if="teamSlug"
+                            :href="editTeam(teamSlug)"
+                            class="underline underline-offset-4"
+                            >Open congregation settings</Link
+                        >
+                    </p>
+                    <p
+                        v-else-if="form.isDirty"
                         class="text-xs text-muted-foreground"
                     >
                         Save your changes before sending a test.

@@ -46,4 +46,35 @@ class TeamFactory extends Factory
             'deleted_at' => now(),
         ]);
     }
+
+    /**
+     * The congregation has its own MailChannels account set up, and the last
+     * domain check passed.
+     *
+     * @return array<string, mixed>
+     */
+    public static function emailSendingAttributes(string $domain = 'shul.example', string $selector = 'cm202611'): array
+    {
+        return [
+            'mailchannels_api_key' => 'congregation-key',
+            'mailchannels_account_id' => 'acct_1',
+            'sending_domain' => $domain,
+            'dkim_selector' => $selector,
+            'dkim_dns_record' => ['name' => "{$selector}._domainkey.{$domain}", 'type' => 'TXT', 'value' => 'v=DKIM1; k=rsa; p=abc'],
+            'domain_check' => [
+                'dkim' => [['dkim_domain' => $domain, 'dkim_selector' => $selector, 'verdict' => 'passed', 'reason' => null]],
+                'spf' => ['verdict' => 'passed', 'reason' => null, 'spfRecord' => 'v=spf1 include:relay.mailchannels.net ~all'],
+                'domain_lockdown' => ['verdict' => 'passed', 'reason' => null],
+            ],
+            'domain_checked_at' => now(),
+        ];
+    }
+
+    /**
+     * Indicate that the team can send email through its own MailChannels account.
+     */
+    public function readyToSendEmail(): static
+    {
+        return $this->state(fn (array $attributes) => self::emailSendingAttributes());
+    }
 }

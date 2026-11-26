@@ -121,12 +121,13 @@ class DashboardCardsTest extends TestCase
 
         $run = EmailRun::query()->create(['team_id' => $this->team->id, 'scheduled_for' => '2026-11-20 14:00:00', 'status' => 'completed', 'subject' => 'Shabbat on Zoom', 'body' => 'Hi']);
         $run->deliveries()->create(['email_recipient_id' => $ann->id, 'scheduled_at' => '2026-11-20 14:00:00', 'status' => 'sent']);
-        $run->deliveries()->create(['email_recipient_id' => null, 'scheduled_at' => '2026-11-20 14:01:00', 'status' => 'failed']);
+        $cy = EmailRecipient::query()->create(['team_id' => $this->team->id, 'email' => 'cy@example.com']);
+        $run->deliveries()->create(['email_recipient_id' => $cy->id, 'scheduled_at' => '2026-11-20 14:01:00', 'status' => 'failed']);
 
         $card = $this->card('weekly-email');
 
         $this->assertSame('Next email Friday, Nov 27 at 9:00 AM', $card['headline']['title']);
-        $this->assertSame(['1', '1', '1 of 2'], array_column($card['stats'], 'value'));
+        $this->assertSame(['2', '1', '1 of 2'], array_column($card['stats'], 'value'));
         $this->assertSame('1 weekly email failed to send', $card['attention'][0]['title']);
     }
 

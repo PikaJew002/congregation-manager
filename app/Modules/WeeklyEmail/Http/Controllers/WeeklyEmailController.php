@@ -3,19 +3,26 @@
 namespace App\Modules\WeeklyEmail\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Mail\CongregationMailer;
+use App\Mail\EmailSending;
+use App\Mail\MailChannels\EmailSendingNotReady;
+use App\Mail\MailChannels\MailChannelsException;
 use App\Models\Team;
+use App\Modules\WeeklyEmail\Actions\PaceDeliveries;
 use App\Modules\WeeklyEmail\Actions\RenderWeeklyEmail;
+use App\Modules\WeeklyEmail\Actions\RunState;
 use App\Modules\WeeklyEmail\Actions\SendWeeklyEmailMessage;
-use App\Modules\WeeklyEmail\Jobs\SendWeeklyEmailJob;
-use App\Modules\WeeklyEmail\Models\EmailDelivery;
 use App\Modules\WeeklyEmail\Models\EmailRecipient;
 use App\Modules\WeeklyEmail\Models\EmailRun;
 use App\Modules\WeeklyEmail\Models\WeeklyEmailSetting;
+use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -46,10 +53,16 @@ class WeeklyEmailController extends Controller
                 continue;
             }
 
-            EmailRecipient::query()->updateOrCreate(
-                ['team_id' => $current_team->id, 'email' => Str::lower($email)],
-                ['name' => $name ?: null, 'status' => 'subscribed', 'unsubscribed_at' => null],
-            );
+            $recipient = EmailRecipient::query()->firstOrNew(['team_id' => $current_team->id, 'email' => Str::lower($email)]);
+            $recipient->name = $name ?: $recipient->name;
+
+            // Someone who reported the email as spam has to sign up again
+            // themselves; adding them back in bulk does not resubscribe them.
+            if ($recipient->status !== 'complained') {
+                $recipient->fill(['status' => 'subscribed', 'status_reason' => null, 'soft_bounce_count' => 0, 'unsubscribed_at' => null]);
+            }
+
+            $recipient->save();
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Recipients saved.')]);
@@ -66,9 +79,15 @@ class WeeklyEmailController extends Controller
             'status' => ['required', Rule::in(['subscribed', 'unsubscribed'])],
         ]);
 
+        if ($recipient->status === 'complained' && $data['status'] === 'subscribed') {
+            throw ValidationException::withMessages(['status' => __('This person reported the weekly email as spam. If they ask to get it again, remove them and add them again.')]);
+        }
+
         $recipient->update([
             'name' => $data['name'] ?? null,
             'status' => $data['status'],
+            'status_reason' => null,
+            'soft_bounce_count' => 0,
             'unsubscribed_at' => $data['status'] === 'unsubscribed' ? now() : null,
         ]);
 
@@ -87,6 +106,8 @@ class WeeklyEmailController extends Controller
     {
         return Inertia::render('weekly-email/Template', [
             'settings' => WeeklyEmailSetting::forTeam($current_team),
+            'sendingProblem' => EmailSending::problem($current_team),
+            'sendingDomain' => $current_team->sending_domain,
         ]);
     }
 
@@ -96,7 +117,11 @@ class WeeklyEmailController extends Controller
             'subject' => ['required', 'string', 'max:255'],
             'body' => ['required', 'string'],
             'zoom_link' => ['nullable', 'url', 'max:2048'],
-            'from_address' => ['required', 'email'],
+            'from_address' => ['required', 'email', function (string $attribute, mixed $value, Closure $fail) use ($current_team) {
+                if (is_string($value) && ! CongregationMailer::isOnSendingDomain($current_team, $value)) {
+                    $fail(__('The from address must be on the congregation\'s sending domain, :domain.', ['domain' => $current_team->sending_domain]));
+                }
+            }],
             'from_name' => ['required', 'string', 'max:255'],
             'reply_to' => ['nullable', 'email'],
         ]);
@@ -137,7 +162,11 @@ class WeeklyEmailController extends Controller
         $recipient = new EmailRecipient(['email' => $request->user()->email, 'name' => $request->user()->name]);
 
         try {
-            $sender->handle($settings, $recipient);
+            $sender->handle($current_team, $settings, $recipient, 'test');
+        } catch (EmailSendingNotReady|MailChannelsException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Test email failed: :error', ['error' => $exception->getMessage()])]);
+
+            return back();
         } catch (Throwable $exception) {
             report($exception);
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Test email failed: :error', ['error' => $exception->getMessage()])]);
@@ -152,8 +181,14 @@ class WeeklyEmailController extends Controller
 
     public function schedule(Team $current_team): Response
     {
+        $subscribers = EmailRecipient::query()->forTeam($current_team)->where('status', 'subscribed')->count();
+
         return Inertia::render('weekly-email/Schedule', [
             'settings' => WeeklyEmailSetting::forTeam($current_team),
+            'sendingProblem' => EmailSending::problem($current_team),
+            'subscribers' => $subscribers,
+            'estimatedMinutes' => PaceDeliveries::estimatedMinutes($subscribers),
+            'dailyEmailLimit' => $current_team->daily_email_limit,
         ]);
     }
 
@@ -163,8 +198,11 @@ class WeeklyEmailController extends Controller
             'enabled' => ['required', 'boolean'],
             'send_day' => ['required', 'integer', 'between:0,6'],
             'send_time' => ['required', 'date_format:H:i'],
-            'window_minutes' => ['required', 'integer', 'between:30,240'],
         ]);
+
+        if ($data['enabled'] && ($problem = EmailSending::problem($current_team)) !== null) {
+            throw ValidationException::withMessages(['enabled' => __('The weekly email cannot be turned on yet. :problem', ['problem' => $problem])]);
+        }
 
         WeeklyEmailSetting::forTeam($current_team)->update($data);
 
@@ -203,19 +241,52 @@ class WeeklyEmailController extends Controller
         return back();
     }
 
-    public function retryRun(Team $current_team, EmailRun $run): RedirectResponse
+    public function retryRun(Team $current_team, EmailRun $run, PaceDeliveries $pace): RedirectResponse
     {
         abort_unless($run->team_id === $current_team->id, 404);
-        abort_if($run->status === 'cancelled', 422);
+        // A paused run is picked up with Resume, which also checks the account.
+        abort_if(in_array($run->status, ['cancelled', 'paused'], true), 422);
 
-        if ($run->deliveries()->where('status', 'failed')->exists()) {
-            $run->update(['status' => 'sending']);
+        // Only people still on the list; a bounced or suppressed address would
+        // fail again.
+        $failed = $run->deliveries()->retryable()->orderBy('scheduled_at')->get();
+
+        if ($failed->isEmpty()) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('There is nobody to retry. Everyone whose email failed has been taken off the list.')]);
+
+            return back();
         }
 
-        $run->deliveries()->where('status', 'failed')->each(function (EmailDelivery $delivery) {
-            $delivery->update(['status' => 'pending', 'error' => null]);
-            SendWeeklyEmailJob::dispatch($delivery->id);
-        });
+        // Retries go out at the same pace as the first send, starting now.
+        $times = $pace->times(CarbonImmutable::now()->utc(), $failed->count());
+
+        foreach ($failed->values() as $index => $delivery) {
+            $delivery->update(['status' => 'pending', 'error' => null, 'queued_at' => null, 'scheduled_at' => $times[$index]]);
+        }
+
+        $run->update(['status' => 'sending']);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => trans_choice('Retrying :count email.|Retrying :count emails.', $failed->count())]);
+
+        return back();
+    }
+
+    public function resumeRun(Team $current_team, EmailRun $run, RunState $state): RedirectResponse
+    {
+        abort_unless($run->team_id === $current_team->id, 404);
+        abort_unless($run->status === 'paused', 422);
+
+        $problem = EmailSending::problem($current_team);
+
+        if ($problem !== null) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Email sending still is not working. :problem', ['problem' => $problem])]);
+
+            return back();
+        }
+
+        $state->resume($run);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Sending resumed.')]);
 
         return back();
     }

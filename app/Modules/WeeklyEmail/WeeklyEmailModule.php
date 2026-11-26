@@ -38,6 +38,8 @@ class WeeklyEmailModule implements ModuleDefinition, ProvidesDashboard
     public function schedule(Schedule $schedule): void
     {
         $schedule->command('weekly-email:dispatch-due')->everyMinute()->withoutOverlapping();
+        $schedule->command('weekly-email:send-due')->everyMinute()->withoutOverlapping();
+        $schedule->command('weekly-email:check-sending')->hourly()->withoutOverlapping();
     }
 
     public function mcpTools(): array

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Form, Head, router, usePage } from '@inertiajs/vue3';
+import { Form, Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { runs as runsRoute } from '@/routes/weekly-email';
-import { cancel, retry, show } from '@/routes/weekly-email/runs';
+import { edit as editTeam } from '@/routes/teams';
+import { cancel, resume, retry, show } from '@/routes/weekly-email/runs';
 import type { Team } from '@/types';
 import { formatDateTime, statusVariant } from '../format';
 import type { EmailDelivery, EmailRun } from '../types';
@@ -35,7 +36,7 @@ const page = usePage();
 let teamSlug = computed(() => page.props.currentTeam?.slug ?? '');
 
 let counts = computed(() => {
-    const result = { pending: 0, sent: 0, failed: 0, cancelled: 0 };
+    const result = { pending: 0, sent: 0, bounced: 0, failed: 0, cancelled: 0 };
 
     for (const delivery of props.deliveries) {
         result[delivery.status]++;
@@ -46,12 +47,25 @@ let counts = computed(() => {
 
 let canCancel = computed(
     () =>
-        ['scheduled', 'sending'].includes(props.run.status) &&
+        ['scheduled', 'sending', 'paused'].includes(props.run.status) &&
         counts.value.pending > 0,
 );
 
+// Only people still on the list are retried; a bounced or suppressed
+// address would fail again.
+let retryable = computed(
+    () =>
+        props.deliveries.filter(
+            (delivery) =>
+                delivery.status === 'failed' &&
+                delivery.recipient?.status === 'subscribed',
+        ).length,
+);
+
 let canRetry = computed(
-    () => props.run.status !== 'cancelled' && counts.value.failed > 0,
+    () =>
+        !['cancelled', 'paused'].includes(props.run.status) &&
+        retryable.value > 0,
 );
 
 let cancelling = ref(false);
@@ -90,6 +104,16 @@ const cancelRun = () => {
 
             <div class="flex gap-2">
                 <Form
+                    v-if="run.status === 'paused'"
+                    v-bind="resume.form([teamSlug, run.id])"
+                    :options="{ preserveScroll: true }"
+                    v-slot="{ processing }"
+                >
+                    <Button type="submit" :disabled="processing">
+                        Resume sending
+                    </Button>
+                </Form>
+                <Form
                     v-if="canRetry"
                     v-bind="retry.form([teamSlug, run.id])"
                     :options="{ preserveScroll: true }"
@@ -100,7 +124,7 @@ const cancelRun = () => {
                         variant="secondary"
                         :disabled="processing"
                     >
-                        Retry {{ counts.failed }} failed
+                        Retry {{ retryable }} failed
                     </Button>
                 </Form>
                 <Button
@@ -112,6 +136,27 @@ const cancelRun = () => {
                     Cancel run
                 </Button>
             </div>
+        </div>
+
+        <div
+            v-if="run.status === 'paused'"
+            class="space-y-1 rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-700 dark:border-red-200/10 dark:bg-red-700/10 dark:text-red-100"
+        >
+            <p class="font-medium">
+                Sending paused {{ formatDateTime(run.paused_at) }}
+            </p>
+            <p>{{ run.pause_reason }}</p>
+            <p>
+                Fix it in the
+                <Link
+                    v-if="teamSlug"
+                    :href="editTeam(teamSlug)"
+                    class="underline underline-offset-4"
+                    >congregation settings</Link
+                >, then resume. The {{ counts.pending }} emails not yet sent go
+                out from then at the usual pace. A run still paused a day after
+                its send time is cancelled.
+            </p>
         </div>
 
         <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -195,6 +240,27 @@ const cancelRun = () => {
                                     class="mt-1 max-w-md text-xs break-words text-destructive"
                                 >
                                     {{ delivery.error }}
+                                </p>
+                                <p
+                                    v-if="delivery.last_event === 'complained'"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    Reported as spam
+                                </p>
+                                <p
+                                    v-else-if="
+                                        delivery.last_event === 'unsubscribed'
+                                    "
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
+                                    Unsubscribed from this email
+                                </p>
+                                <p
+                                    v-else-if="delivery.delivered_at"
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
+                                    Delivered
+                                    {{ formatDateTime(delivery.delivered_at) }}
                                 </p>
                             </td>
                         </tr>

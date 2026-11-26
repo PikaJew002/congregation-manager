@@ -77,6 +77,9 @@ class AppServiceProvider extends ServiceProvider
                 'domain' => $config['dkim_domain'] ?? null,
                 'selector' => $config['dkim_selector'] ?? null,
                 'private_key' => $config['dkim_private_key'] ?? null,
+            ], [
+                'transactional' => $config['transactional'] ?? null,
+                'tracking' => $config['tracking'] ?? null,
             ]);
         });
     }
