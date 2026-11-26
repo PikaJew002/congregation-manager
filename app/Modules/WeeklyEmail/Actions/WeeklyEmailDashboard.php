@@ -44,6 +44,17 @@ class WeeklyEmailDashboard
 
         $attention = [];
 
+        $paused = $last?->status === 'paused';
+
+        if ($paused) {
+            $attention[] = [
+                'title' => 'Sending the weekly email is paused',
+                'detail' => $last->pause_reason.' Fix it, then resume the run.',
+                'href' => route('weekly-email.runs.show', [$team->slug, $last]),
+                'tone' => 'danger',
+            ];
+        }
+
         if ($last && $last->failed_count > 0) {
             $attention[] = [
                 'title' => trans_choice(':count weekly email failed to send|:count weekly emails failed to send', $last->failed_count),
@@ -82,6 +93,11 @@ class WeeklyEmailDashboard
 
         return [
             'headline' => match (true) {
+                $paused => [
+                    'title' => 'Sending paused',
+                    'detail' => "{$last->sent_count} of {$last->deliveries_count} sent before it paused",
+                    'status' => ['label' => 'Paused', 'tone' => 'danger'],
+                ],
                 $sending => [
                     'title' => 'Sending now',
                     'detail' => "{$last->sent_count} of {$last->deliveries_count} sent so far",

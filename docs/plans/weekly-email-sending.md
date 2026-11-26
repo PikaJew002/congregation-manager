@@ -77,10 +77,10 @@ MailChannels sends from its own shared servers, so receiving providers judge the
 
 ## Failures
 
-- **Temporary errors** release the job with backoff (1, 5, 15 minutes), up to 3 attempts, then mark the delivery failed. "Sending too fast" also pushes every later delivery in the run back by 2 minutes.
+- **Temporary errors** move the delivery later and let the send loop queue it again: 3 tries in all, 1 then 5 minutes apart, then the delivery is marked failed. "Sending too fast" also pushes every later delivery in the run back by 2 minutes.
 - **Account problems** pause the run (`status = paused`, `pause_reason` stored) and leave the remaining deliveries pending. The dashboard shows the reason with a link to Email sending in congregation settings. A Resume button on the run reschedules the pending deliveries from now at the same pace. A run still paused 24 hours after it was scheduled is cancelled, so last week's email does not go out days late.
 - **Rejected messages** fail that delivery only.
-- Retry on a run (existing button) reschedules failed deliveries through the same pacing instead of sending them all at once.
+- Retry on a run (existing button) reschedules failed deliveries through the same pacing instead of sending them all at once. It is refused while the run is paused; Resume handles that, after checking the account works.
 
 ## Delivery events (webhooks)
 

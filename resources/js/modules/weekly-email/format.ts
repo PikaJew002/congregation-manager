@@ -19,6 +19,7 @@ export function statusVariant(
         case 'subscribed':
             return 'default';
         case 'failed':
+        case 'paused':
             return 'destructive';
         case 'cancelled':
         case 'unsubscribed':

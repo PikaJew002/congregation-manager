@@ -21,12 +21,19 @@ export type WeeklyEmailSettings = {
     send_time: string;
 };
 
-export type RunStatus = 'scheduled' | 'sending' | 'completed' | 'cancelled';
+export type RunStatus =
+    | 'scheduled'
+    | 'sending'
+    | 'paused'
+    | 'completed'
+    | 'cancelled';
 
 export type EmailRun = {
     id: number;
     scheduled_for: string;
     status: RunStatus;
+    pause_reason: string | null;
+    paused_at: string | null;
     subject: string;
     body: string;
     deliveries_count?: number;
@@ -41,6 +48,7 @@ export type EmailDelivery = {
     scheduled_at: string;
     sent_at: string | null;
     status: DeliveryStatus;
+    attempts: number;
     error: string | null;
     recipient: Pick<EmailRecipient, 'id' | 'email' | 'name'> | null;
 };

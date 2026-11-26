@@ -10,6 +10,7 @@ use App\Mail\MailChannels\MailChannelsException;
 use App\Models\Team;
 use App\Modules\WeeklyEmail\Actions\PaceDeliveries;
 use App\Modules\WeeklyEmail\Actions\RenderWeeklyEmail;
+use App\Modules\WeeklyEmail\Actions\RunState;
 use App\Modules\WeeklyEmail\Actions\SendWeeklyEmailMessage;
 use App\Modules\WeeklyEmail\Models\EmailRecipient;
 use App\Modules\WeeklyEmail\Models\EmailRun;
@@ -231,7 +232,8 @@ class WeeklyEmailController extends Controller
     public function retryRun(Team $current_team, EmailRun $run, PaceDeliveries $pace): RedirectResponse
     {
         abort_unless($run->team_id === $current_team->id, 404);
-        abort_if($run->status === 'cancelled', 422);
+        // A paused run is picked up with Resume, which also checks the account.
+        abort_if(in_array($run->status, ['cancelled', 'paused'], true), 422);
 
         $failed = $run->deliveries()->where('status', 'failed')->orderBy('scheduled_at')->get();
 
@@ -249,6 +251,26 @@ class WeeklyEmailController extends Controller
         $run->update(['status' => 'sending']);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => trans_choice('Retrying :count email.|Retrying :count emails.', $failed->count())]);
+
+        return back();
+    }
+
+    public function resumeRun(Team $current_team, EmailRun $run, RunState $state): RedirectResponse
+    {
+        abort_unless($run->team_id === $current_team->id, 404);
+        abort_unless($run->status === 'paused', 422);
+
+        $problem = EmailSending::problem($current_team);
+
+        if ($problem !== null) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Email sending still is not working. :problem', ['problem' => $problem])]);
+
+            return back();
+        }
+
+        $state->resume($run);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Sending resumed.')]);
 
         return back();
     }

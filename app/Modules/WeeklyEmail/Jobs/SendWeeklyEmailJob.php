@@ -2,8 +2,15 @@
 
 namespace App\Modules\WeeklyEmail\Jobs;
 
+use App\Mail\MailChannels\AccountProblem;
+use App\Mail\MailChannels\EmailSendingNotReady;
+use App\Mail\MailChannels\MessageRejected;
+use App\Mail\MailChannels\SendingTooFast;
+use App\Mail\MailChannels\TemporaryFailure;
+use App\Modules\WeeklyEmail\Actions\RunState;
 use App\Modules\WeeklyEmail\Actions\SendWeeklyEmailMessage;
 use App\Modules\WeeklyEmail\Models\EmailDelivery;
+use App\Modules\WeeklyEmail\Models\EmailRun;
 use App\Modules\WeeklyEmail\Models\WeeklyEmailSetting;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,6 +27,15 @@ class SendWeeklyEmailJob implements ShouldQueue
     public const RATE_LIMITER = 'weekly-email-sends';
 
     public const MAX_PER_MINUTE = 10;
+
+    /** Sends of one email, counting the first, before a temporary failure is final. */
+    public const MAX_ATTEMPTS = 3;
+
+    /** Wait before the second and third attempts. */
+    public const RETRY_AFTER_MINUTES = [1, 5];
+
+    /** How far the rest of the run moves back when MailChannels asks us to slow down. */
+    public const SLOW_DOWN_SECONDS = 120;
 
     public function __construct(public int $deliveryId, public ?int $teamId = null) {}
 
@@ -50,11 +66,17 @@ class SendWeeklyEmailJob implements ShouldQueue
         return now()->addHours(2);
     }
 
-    public function handle(SendWeeklyEmailMessage $sender): void
+    public function handle(SendWeeklyEmailMessage $sender, RunState $state): void
     {
         $delivery = EmailDelivery::query()->with(['run.team', 'recipient'])->find($this->deliveryId);
 
-        if (! $delivery || $delivery->status !== 'pending' || $delivery->run->status === 'cancelled') {
+        if (! $delivery || $delivery->status !== 'pending' || ! in_array($delivery->run->status, ['scheduled', 'sending'], true)) {
+            return;
+        }
+
+        // Moved later since this job was queued (a retry wait, or the run was
+        // slowed down); the send loop queues it again for its new time.
+        if ($delivery->scheduled_at->gt(now()->addSeconds(5))) {
             return;
         }
 
@@ -78,20 +100,73 @@ class SendWeeklyEmailJob implements ShouldQueue
 
         try {
             $messageId = $sender->handle($delivery->run->team, $settings, $delivery->recipient, 'weekly-'.$delivery->run->id);
+        } catch (EmailSendingNotReady|AccountProblem $exception) {
+            // Nothing else will go through either: stop the run until someone
+            // fixes the account, and leave this delivery pending.
+            $state->pause($delivery->run, $exception->getMessage());
+
+            return;
+        } catch (TemporaryFailure $exception) {
+            $this->retryLater($delivery, $exception, $state);
+
+            return;
         } catch (Throwable $exception) {
-            $delivery->update(['status' => 'failed', 'error' => $exception->getMessage()]);
+            if (! $exception instanceof MessageRejected) {
+                report($exception);
+            }
+
+            $delivery->update(['status' => 'failed', 'attempts' => $delivery->attempts + 1, 'error' => $exception->getMessage()]);
             $this->refreshRun($delivery);
 
             return;
         }
 
-        $delivery->update(['status' => 'sent', 'sent_at' => now(), 'error' => null, 'message_id' => $messageId]);
+        $delivery->update([
+            'status' => 'sent',
+            'sent_at' => now(),
+            'attempts' => $delivery->attempts + 1,
+            'error' => null,
+            'message_id' => $messageId,
+        ]);
         $this->refreshRun($delivery);
     }
 
+    /**
+     * Try a temporary failure again after a wait, up to MAX_ATTEMPTS. When
+     * MailChannels said we were sending too fast, the rest of the run waits
+     * too.
+     */
+    private function retryLater(EmailDelivery $delivery, TemporaryFailure $exception, RunState $state): void
+    {
+        $attempts = $delivery->attempts + 1;
+
+        if ($attempts >= self::MAX_ATTEMPTS) {
+            $delivery->update(['status' => 'failed', 'attempts' => $attempts, 'error' => $exception->getMessage()]);
+            $this->refreshRun($delivery);
+
+            return;
+        }
+
+        if ($exception instanceof SendingTooFast) {
+            $state->pushBack($delivery->run, self::SLOW_DOWN_SECONDS);
+        }
+
+        $delivery->update([
+            'attempts' => $attempts,
+            'scheduled_at' => now()->addMinutes(self::RETRY_AFTER_MINUTES[$attempts - 1]),
+            'queued_at' => null,
+            'error' => 'Will try again: '.$exception->getMessage(),
+        ]);
+    }
+
+    /** Mark the run completed once nothing is pending. A paused or cancelled run is left alone. */
     private function refreshRun(EmailDelivery $delivery): void
     {
         $pending = $delivery->run->deliveries()->where('status', 'pending')->exists();
-        $delivery->run->update(['status' => $pending ? 'sending' : 'completed']);
+
+        EmailRun::query()
+            ->whereKey($delivery->run->id)
+            ->whereIn('status', ['scheduled', 'sending'])
+            ->update(['status' => $pending ? 'sending' : 'completed']);
     }
 }

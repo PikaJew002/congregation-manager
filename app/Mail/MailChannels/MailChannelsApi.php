@@ -94,7 +94,7 @@ class MailChannelsApi
         $lower = Str::lower($detail);
 
         if (Str::contains($lower, ['too fast'])) {
-            return new TemporaryFailure("MailChannels asked us to slow down: {$detail}");
+            return new SendingTooFast("MailChannels asked us to slow down: {$detail}");
         }
 
         if (Str::contains($lower, ['daily limit', 'quota'])) {

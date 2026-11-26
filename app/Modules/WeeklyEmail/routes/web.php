@@ -20,3 +20,4 @@ Route::get('runs', [WeeklyEmailController::class, 'runs'])->name('runs');
 Route::get('runs/{run}', [WeeklyEmailController::class, 'showRun'])->name('runs.show');
 Route::post('runs/{run}/cancel', [WeeklyEmailController::class, 'cancelRun'])->name('runs.cancel');
 Route::post('runs/{run}/retry', [WeeklyEmailController::class, 'retryRun'])->name('runs.retry');
+Route::post('runs/{run}/resume', [WeeklyEmailController::class, 'resumeRun'])->name('runs.resume');
