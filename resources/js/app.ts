@@ -38,8 +38,6 @@ void createInertiaApp({
     },
     layout: (name) => {
         switch (true) {
-            case name === 'Welcome':
-                return null;
             case name.startsWith('auth/'):
             case name.startsWith('invitations/'):
             case name === 'weekly-email/Unsubscribe':
