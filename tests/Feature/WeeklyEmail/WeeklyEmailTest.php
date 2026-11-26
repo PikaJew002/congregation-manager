@@ -6,13 +6,16 @@ use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
 use App\Modules\WeeklyEmail\Actions\RenderWeeklyEmail;
+use App\Modules\WeeklyEmail\Actions\WeeklyEmailDashboard;
 use App\Modules\WeeklyEmail\Jobs\SendWeeklyEmailJob;
 use App\Modules\WeeklyEmail\Models\EmailRecipient;
 use App\Modules\WeeklyEmail\Models\EmailRun;
 use App\Modules\WeeklyEmail\Models\WeeklyEmailSetting;
 use App\Support\Modules\ModuleAccess;
 use Carbon\CarbonImmutable;
+use Database\Factories\TeamFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -93,22 +96,77 @@ class WeeklyEmailTest extends TestCase
                 ->where('settings.subject', 'This week on Zoom'));
     }
 
-    public function test_test_send_goes_to_the_user_without_touching_the_list_or_runs(): void
+    public function test_test_send_goes_to_the_user_through_the_congregations_account(): void
     {
-        config(['mail.mailers.mailchannels' => ['transport' => 'array']]);
+        Http::fake(['api.mailchannels.net/*' => Http::response(['results' => [['index' => 0, 'message_id' => 'mc-1', 'status' => 'sent']]], 202)]);
         [$team, $owner] = $this->owner();
-        WeeklyEmailSetting::forTeam($team)->update(['subject' => 'This week']);
+        $this->readyToSend($team);
+        WeeklyEmailSetting::forTeam($team)->update(['subject' => 'This week', 'from_address' => 'office@shul.example']);
 
         $this->actingAs($owner)
             ->post(route('weekly-email.template.test', $team->slug))
             ->assertRedirect();
 
-        $messages = Mail::mailer('mailchannels')->getSymfonyTransport()->messages();
-        $this->assertCount(1, $messages);
-        $this->assertSame($owner->email, $messages[0]->getOriginalMessage()->getTo()[0]->getAddress());
-        $this->assertSame('[Test] This week', $messages[0]->getOriginalMessage()->getSubject());
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request) => $request->hasHeader('X-Api-Key', 'congregation-key')
+            && $request['personalizations'][0]['to'][0]['email'] === $owner->email
+            && $request['subject'] === '[Test] This week'
+            && $request['campaign_id'] === 'test');
         $this->assertDatabaseCount('email_recipients', 0);
         $this->assertDatabaseCount('email_runs', 0);
+    }
+
+    public function test_test_send_says_what_is_missing_before_email_is_set_up(): void
+    {
+        Http::fake();
+        [$team, $owner] = $this->owner();
+
+        $this->actingAs($owner)
+            ->post(route('weekly-email.template.test', $team->slug))
+            ->assertRedirect()
+            ->assertInertiaFlash('toast.type', 'error');
+
+        Http::assertNothingSent();
+    }
+
+    public function test_a_sent_delivery_keeps_the_mailchannels_message_id(): void
+    {
+        Http::fake(['api.mailchannels.net/*' => Http::response(['results' => [['index' => 0, 'message_id' => 'mc-42', 'status' => 'sent']]], 202)]);
+        [$team] = $this->owner();
+        $this->readyToSend($team);
+        WeeklyEmailSetting::forTeam($team)->update(['from_address' => 'office@shul.example']);
+        $recipient = EmailRecipient::query()->create(['team_id' => $team->id, 'email' => 'a@example.com', 'status' => 'subscribed']);
+        $run = EmailRun::query()->create([
+            'team_id' => $team->id,
+            'scheduled_for' => now(),
+            'status' => 'sending',
+            'subject' => 'Hello',
+            'body' => 'Body',
+        ]);
+        $delivery = $run->deliveries()->create(['email_recipient_id' => $recipient->id, 'scheduled_at' => now(), 'status' => 'pending']);
+
+        SendWeeklyEmailJob::dispatchSync($delivery->id);
+
+        $this->assertSame('sent', $delivery->fresh()->status);
+        $this->assertSame('mc-42', $delivery->fresh()->message_id);
+        Http::assertSent(fn ($request) => $request['campaign_id'] === 'weekly-'.$run->id
+            && $request['transactional'] === false
+            && $request['headers']['List-Unsubscribe'] === '<'.$recipient->unsubscribeUrl().'>');
+    }
+
+    public function test_the_from_address_must_be_on_the_sending_domain(): void
+    {
+        [$team, $owner] = $this->owner();
+        $this->readyToSend($team);
+        $template = ['subject' => 'Hi', 'body' => 'Body', 'from_name' => 'Shul'];
+
+        $this->actingAs($owner)
+            ->put(route('weekly-email.template.update', $team->slug), [...$template, 'from_address' => 'office@elsewhere.example'])
+            ->assertSessionHasErrors('from_address');
+
+        $this->actingAs($owner)
+            ->put(route('weekly-email.template.update', $team->slug), [...$template, 'from_address' => 'office@shul.example'])
+            ->assertSessionHasNoErrors();
     }
 
     public function test_unsubscribe_link_only_appears_where_the_template_places_it(): void
@@ -165,6 +223,7 @@ class WeeklyEmailTest extends TestCase
     {
         Mail::fake();
         [$team] = $this->owner();
+        $this->readyToSend($team);
         WeeklyEmailSetting::forTeam($team)->update([
             'enabled' => true,
             'send_day' => CarbonImmutable::parse('2026-11-01 09:05', 'America/New_York')->dayOfWeek,
@@ -189,6 +248,7 @@ class WeeklyEmailTest extends TestCase
         Mail::fake();
         [$team] = $this->owner();
         $team->update(['timezone' => 'America/Los_Angeles']);
+        $this->readyToSend($team);
         WeeklyEmailSetting::forTeam($team)->update([
             'enabled' => true,
             'send_day' => CarbonImmutable::parse('2026-11-01', 'America/Los_Angeles')->dayOfWeek,
@@ -206,6 +266,92 @@ class WeeklyEmailTest extends TestCase
         $this->assertDatabaseCount('email_runs', 1);
     }
 
+    public function test_dispatch_skips_a_congregation_that_cannot_send(): void
+    {
+        Http::fake();
+        [$team] = $this->owner();
+        $this->enableSundayNine($team);
+        EmailRecipient::query()->create(['team_id' => $team->id, 'email' => 'a@example.com', 'status' => 'subscribed']);
+
+        $this->travelTo(CarbonImmutable::parse('2026-11-01 09:05', 'America/New_York'));
+        $this->artisan('weekly-email:dispatch-due')->assertSuccessful();
+
+        $this->assertDatabaseCount('email_runs', 0);
+        Http::assertNothingSent();
+    }
+
+    public function test_dispatch_rechecks_a_day_old_domain_check_and_skips_when_it_now_fails(): void
+    {
+        Http::fake(['api.mailchannels.net/tx/v1/check-domain' => Http::response(['check_results' => [
+            'dkim' => [['dkim_domain' => 'shul.example', 'dkim_selector' => 'cm202611', 'verdict' => 'passed']],
+            'spf' => ['verdict' => 'failed', 'reason' => 'No SPF record'],
+            'domain_lockdown' => ['verdict' => 'passed'],
+        ]])]);
+        [$team] = $this->owner();
+        $this->readyToSend($team);
+        $this->enableSundayNine($team);
+        EmailRecipient::query()->create(['team_id' => $team->id, 'email' => 'a@example.com', 'status' => 'subscribed']);
+        $team->forceFill(['domain_checked_at' => CarbonImmutable::parse('2026-10-30 09:00', 'America/New_York')])->save();
+
+        $this->travelTo(CarbonImmutable::parse('2026-11-01 09:05', 'America/New_York'));
+        $this->artisan('weekly-email:dispatch-due')->assertSuccessful();
+        $this->artisan('weekly-email:dispatch-due')->assertSuccessful();
+
+        $this->assertDatabaseCount('email_runs', 0);
+        Http::assertSentCount(1);
+        $this->assertSame('failed', $team->fresh()->domain_check['spf']['verdict']);
+    }
+
+    public function test_dispatch_uses_a_fresh_passing_check_without_asking_mailchannels(): void
+    {
+        Http::fake();
+        Mail::fake();
+        [$team] = $this->owner();
+        $this->readyToSend($team);
+        $this->enableSundayNine($team);
+        EmailRecipient::query()->create(['team_id' => $team->id, 'email' => 'a@example.com', 'status' => 'subscribed']);
+        $team->forceFill(['domain_checked_at' => CarbonImmutable::parse('2026-11-01 07:00', 'America/New_York')])->save();
+
+        $this->travelTo(CarbonImmutable::parse('2026-11-01 09:05', 'America/New_York'));
+        $this->artisan('weekly-email:dispatch-due')->assertSuccessful();
+
+        $this->assertDatabaseCount('email_runs', 1);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'check-domain'));
+    }
+
+    public function test_the_schedule_cannot_be_turned_on_until_sending_is_set_up(): void
+    {
+        [$team, $owner] = $this->owner();
+        $schedule = ['enabled' => true, 'send_day' => 0, 'send_time' => '09:00', 'window_minutes' => 60];
+
+        $this->actingAs($owner)
+            ->put(route('weekly-email.schedule.update', $team->slug), $schedule)
+            ->assertSessionHasErrors('enabled');
+        $this->assertFalse(WeeklyEmailSetting::forTeam($team)->enabled);
+
+        $this->actingAs($owner)
+            ->put(route('weekly-email.schedule.update', $team->slug), [...$schedule, 'enabled' => false])
+            ->assertSessionHasNoErrors();
+
+        $this->readyToSend($team);
+
+        $this->actingAs($owner)
+            ->put(route('weekly-email.schedule.update', $team->slug), $schedule)
+            ->assertSessionHasNoErrors();
+        $this->assertTrue(WeeklyEmailSetting::forTeam($team)->enabled);
+    }
+
+    public function test_the_dashboard_says_when_a_scheduled_email_cannot_send(): void
+    {
+        [$team] = $this->owner();
+        WeeklyEmailSetting::forTeam($team)->update(['enabled' => true]);
+
+        $card = app(WeeklyEmailDashboard::class)->handle($team);
+
+        $this->assertSame('The weekly email cannot send', $card['attention'][0]['title']);
+        $this->assertStringContainsString('MailChannels API key', $card['attention'][0]['detail']);
+    }
+
     public function test_unsubscribe_link_opts_a_recipient_out(): void
     {
         [$team] = $this->owner();
@@ -219,6 +365,21 @@ class WeeklyEmailTest extends TestCase
             ->assertRedirect();
 
         $this->assertSame('unsubscribed', $recipient->fresh()->status);
+    }
+
+    private function enableSundayNine(Team $team): void
+    {
+        WeeklyEmailSetting::forTeam($team)->update([
+            'enabled' => true,
+            'send_day' => CarbonImmutable::parse('2026-11-01', 'America/New_York')->dayOfWeek,
+            'send_time' => '09:00',
+            'window_minutes' => 60,
+        ]);
+    }
+
+    private function readyToSend(Team $team): void
+    {
+        $team->forceFill(TeamFactory::emailSendingAttributes())->save();
     }
 
     /**

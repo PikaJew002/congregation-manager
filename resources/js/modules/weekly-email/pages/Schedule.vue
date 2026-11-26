@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import CongregationTimezone from '@/components/CongregationTimezone.vue';
 import Heading from '@/components/Heading.vue';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { edit as editTeam } from '@/routes/teams';
 import { schedule as scheduleRoute } from '@/routes/weekly-email';
 import { update } from '@/routes/weekly-email/schedule';
 import type { Team } from '@/types';
@@ -16,6 +17,7 @@ import type { WeeklyEmailSettings } from '../types';
 
 const props = defineProps<{
     settings: WeeklyEmailSettings;
+    sendingProblem: string | null;
 }>();
 
 defineOptions({
@@ -76,6 +78,21 @@ const submit = () => {
         />
 
         <form class="space-y-6" @submit.prevent="submit">
+            <div
+                v-if="sendingProblem"
+                class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-200/10 dark:bg-amber-700/10 dark:text-amber-100"
+            >
+                <p class="font-medium">Email sending isn't set up yet</p>
+                <p>
+                    {{ sendingProblem }}
+                    <Link
+                        v-if="teamSlug"
+                        :href="editTeam(teamSlug)"
+                        class="underline underline-offset-4"
+                        >Open congregation settings</Link
+                    >
+                </p>
+            </div>
             <label
                 class="flex items-start justify-between gap-4 rounded-lg border p-4"
             >

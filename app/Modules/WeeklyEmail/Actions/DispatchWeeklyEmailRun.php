@@ -2,6 +2,7 @@
 
 namespace App\Modules\WeeklyEmail\Actions;
 
+use App\Mail\EmailSending;
 use App\Modules\WeeklyEmail\Jobs\SendWeeklyEmailJob;
 use App\Modules\WeeklyEmail\Models\EmailRecipient;
 use App\Modules\WeeklyEmail\Models\EmailRun;
@@ -43,6 +44,14 @@ class DispatchWeeklyEmailRun
                 ->exists();
 
             if ($exists) {
+                return;
+            }
+
+            // Re-check the domain once a day; a failing setup skips the send
+            // and shows on the dashboard instead.
+            EmailSending::check($settings->team);
+
+            if (! EmailSending::ready($settings->team)) {
                 return;
             }
 

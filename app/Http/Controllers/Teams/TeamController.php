@@ -7,6 +7,7 @@ use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Teams\DeleteTeamRequest;
 use App\Http\Requests\Teams\SaveTeamRequest;
+use App\Mail\EmailSending;
 use App\Models\Membership;
 use App\Models\Team;
 use App\Models\User;
@@ -67,6 +68,16 @@ class TeamController extends Controller
                 'timezone' => $team->localTimezone(),
             ],
             'modules' => $catalog,
+            'emailSending' => Gate::allows('update', $team) ? [
+                'hasApiKey' => filled($team->mailchannels_api_key),
+                'accountId' => $team->mailchannels_account_id,
+                'sendingDomain' => $team->sending_domain,
+                'dkimSelector' => $team->dkim_selector,
+                'dailyEmailLimit' => $team->daily_email_limit,
+                'checkedAt' => $team->domain_checked_at?->toISOString(),
+                'records' => EmailSending::records($team),
+                'problem' => EmailSending::problem($team),
+            ] : null,
             'members' => $team->members()->get()->map(function (User $member) use ($access, $team) {
                 /** @var Membership $membership */
                 $membership = $member->getRelation('pivot');

@@ -8,6 +8,8 @@ import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import InviteMemberModal from '@/components/InviteMemberModal.vue';
 import RemoveMemberModal from '@/components/RemoveMemberModal.vue';
+import TeamEmailSending from '@/components/TeamEmailSending.vue';
+import type { EmailSendingSettings } from '@/components/TeamEmailSending.vue';
 import TimezoneSelect from '@/components/TimezoneSelect.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +48,7 @@ type Props = {
     permissions: TeamPermissions;
     availableRoles: RoleOption[];
     modules: CongregationModule[];
+    emailSending: EmailSendingSettings | null;
 };
 
 const props = defineProps<Props>();
@@ -212,6 +215,12 @@ const toggleMemberModule = (
                 </label>
             </div>
         </div>
+
+        <TeamEmailSending
+            v-if="permissions.canUpdateTeam && emailSending"
+            :team-slug="team.slug"
+            :settings="emailSending"
+        />
 
         <!-- Members Section -->
         <div class="space-y-6">

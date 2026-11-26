@@ -35,7 +35,7 @@ class SendWeeklyEmailJob implements ShouldQueue
         $settings->body = $delivery->run->body;
 
         try {
-            $sender->handle($settings, $delivery->recipient);
+            $messageId = $sender->handle($delivery->run->team, $settings, $delivery->recipient, 'weekly-'.$delivery->run->id);
         } catch (Throwable $exception) {
             $delivery->update(['status' => 'failed', 'error' => $exception->getMessage()]);
             $this->refreshRun($delivery);
@@ -43,7 +43,7 @@ class SendWeeklyEmailJob implements ShouldQueue
             return;
         }
 
-        $delivery->update(['status' => 'sent', 'sent_at' => now(), 'error' => null]);
+        $delivery->update(['status' => 'sent', 'sent_at' => now(), 'error' => null, 'message_id' => $messageId]);
         $this->refreshRun($delivery);
     }
 

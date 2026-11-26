@@ -23,6 +23,14 @@ use Illuminate\Support\Str;
  * @property string $slug
  * @property string $timezone
  * @property bool $is_personal
+ * @property string|null $mailchannels_api_key
+ * @property string|null $mailchannels_account_id
+ * @property string|null $sending_domain
+ * @property string|null $dkim_selector
+ * @property array{name?: string, type?: string, value?: string}|null $dkim_dns_record
+ * @property array<string, mixed>|null $domain_check
+ * @property CarbonImmutable|null $domain_checked_at
+ * @property int $daily_email_limit
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -40,6 +48,14 @@ class Team extends Model
 
     /** @var array<string, mixed> */
     protected $attributes = ['timezone' => self::DEFAULT_TIMEZONE];
+
+    /**
+     * The MailChannels key is the congregation's secret. It is set only through
+     * the email sending settings, never mass-assigned, and never serialized.
+     *
+     * @var list<string>
+     */
+    protected $hidden = ['mailchannels_api_key'];
 
     /**
      * Bootstrap the model and its traits.
@@ -168,6 +184,11 @@ class Team extends Model
     {
         return [
             'is_personal' => 'boolean',
+            'mailchannels_api_key' => 'encrypted',
+            'dkim_dns_record' => 'array',
+            'domain_check' => 'array',
+            'domain_checked_at' => 'datetime',
+            'daily_email_limit' => 'integer',
         ];
     }
 

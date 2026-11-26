@@ -3,6 +3,10 @@
 namespace App\Modules\WeeklyEmail\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Mail\CongregationMailer;
+use App\Mail\EmailSending;
+use App\Mail\MailChannels\EmailSendingNotReady;
+use App\Mail\MailChannels\MailChannelsException;
 use App\Models\Team;
 use App\Modules\WeeklyEmail\Actions\RenderWeeklyEmail;
 use App\Modules\WeeklyEmail\Actions\SendWeeklyEmailMessage;
@@ -11,11 +15,13 @@ use App\Modules\WeeklyEmail\Models\EmailDelivery;
 use App\Modules\WeeklyEmail\Models\EmailRecipient;
 use App\Modules\WeeklyEmail\Models\EmailRun;
 use App\Modules\WeeklyEmail\Models\WeeklyEmailSetting;
+use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -87,6 +93,8 @@ class WeeklyEmailController extends Controller
     {
         return Inertia::render('weekly-email/Template', [
             'settings' => WeeklyEmailSetting::forTeam($current_team),
+            'sendingProblem' => EmailSending::problem($current_team),
+            'sendingDomain' => $current_team->sending_domain,
         ]);
     }
 
@@ -96,7 +104,11 @@ class WeeklyEmailController extends Controller
             'subject' => ['required', 'string', 'max:255'],
             'body' => ['required', 'string'],
             'zoom_link' => ['nullable', 'url', 'max:2048'],
-            'from_address' => ['required', 'email'],
+            'from_address' => ['required', 'email', function (string $attribute, mixed $value, Closure $fail) use ($current_team) {
+                if (is_string($value) && ! CongregationMailer::isOnSendingDomain($current_team, $value)) {
+                    $fail(__('The from address must be on the congregation\'s sending domain, :domain.', ['domain' => $current_team->sending_domain]));
+                }
+            }],
             'from_name' => ['required', 'string', 'max:255'],
             'reply_to' => ['nullable', 'email'],
         ]);
@@ -137,7 +149,11 @@ class WeeklyEmailController extends Controller
         $recipient = new EmailRecipient(['email' => $request->user()->email, 'name' => $request->user()->name]);
 
         try {
-            $sender->handle($settings, $recipient);
+            $sender->handle($current_team, $settings, $recipient, 'test');
+        } catch (EmailSendingNotReady|MailChannelsException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Test email failed: :error', ['error' => $exception->getMessage()])]);
+
+            return back();
         } catch (Throwable $exception) {
             report($exception);
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Test email failed: :error', ['error' => $exception->getMessage()])]);
@@ -154,6 +170,7 @@ class WeeklyEmailController extends Controller
     {
         return Inertia::render('weekly-email/Schedule', [
             'settings' => WeeklyEmailSetting::forTeam($current_team),
+            'sendingProblem' => EmailSending::problem($current_team),
         ]);
     }
 
@@ -165,6 +182,10 @@ class WeeklyEmailController extends Controller
             'send_time' => ['required', 'date_format:H:i'],
             'window_minutes' => ['required', 'integer', 'between:30,240'],
         ]);
+
+        if ($data['enabled'] && ($problem = EmailSending::problem($current_team)) !== null) {
+            throw ValidationException::withMessages(['enabled' => __('The weekly email cannot be turned on yet. :problem', ['problem' => $problem])]);
+        }
 
         WeeklyEmailSetting::forTeam($current_team)->update($data);
 

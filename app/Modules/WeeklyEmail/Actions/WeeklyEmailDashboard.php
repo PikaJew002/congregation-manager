@@ -2,6 +2,7 @@
 
 namespace App\Modules\WeeklyEmail\Actions;
 
+use App\Mail\EmailSending;
 use App\Models\Team;
 use App\Modules\WeeklyEmail\Models\EmailRecipient;
 use App\Modules\WeeklyEmail\Models\EmailRun;
@@ -48,6 +49,15 @@ class WeeklyEmailDashboard
                 'title' => trans_choice(':count weekly email failed to send|:count weekly emails failed to send', $last->failed_count),
                 'detail' => 'In the send for '.$this->local($last->scheduled_for, $team)->format('M j').'. Retry it from Email runs.',
                 'href' => route('weekly-email.runs.show', [$team->slug, $last]),
+                'tone' => 'danger',
+            ];
+        }
+
+        if ($settings?->enabled && ($problem = EmailSending::problem($team)) !== null) {
+            $attention[] = [
+                'title' => 'The weekly email cannot send',
+                'detail' => $problem,
+                'href' => route('teams.edit', $team->slug),
                 'tone' => 'danger',
             ];
         }
