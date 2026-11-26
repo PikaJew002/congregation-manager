@@ -1,14 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import {
-    BookOpen,
-    FolderGit2,
-    LayoutGrid,
-    Mail,
-    Music,
-    Video,
-} from '@lucide/vue';
-import type { LucideIcon } from '@lucide/vue';
+import { BookOpen, FolderGit2, LayoutGrid } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
@@ -24,6 +16,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { moduleIcon } from '@/lib/moduleIcons';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
@@ -32,12 +25,6 @@ const page = usePage();
 let dashboardUrl = computed(() =>
     page.props.currentTeam ? dashboard(page.props.currentTeam.slug).url : '/',
 );
-
-const icons: Record<string, LucideIcon> = {
-    mail: Mail,
-    video: Video,
-    music: Music,
-};
 
 let mainNavItems = computed<NavItem[]>(() => {
     let items: NavItem[] = [
@@ -55,13 +42,19 @@ let mainNavItems = computed<NavItem[]>(() => {
     }>;
 
     for (const module of modules) {
-        for (const item of module.items) {
-            items.push({
+        if (module.items.length === 0) {
+            continue;
+        }
+
+        items.push({
+            title: module.name,
+            href: module.items[0].href,
+            icon: moduleIcon(module.icon),
+            items: module.items.map((item) => ({
                 title: item.title,
                 href: item.href,
-                icon: icons[module.icon] ?? LayoutGrid,
-            });
-        }
+            })),
+        });
     }
 
     return items;

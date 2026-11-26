@@ -2,10 +2,13 @@
 
 namespace App\Modules\WeeklyEmail;
 
+use App\Models\Team;
+use App\Modules\WeeklyEmail\Actions\WeeklyEmailDashboard;
 use App\Support\Modules\ModuleDefinition;
+use App\Support\Modules\ProvidesDashboard;
 use Illuminate\Console\Scheduling\Schedule;
 
-class WeeklyEmailModule implements ModuleDefinition
+class WeeklyEmailModule implements ModuleDefinition, ProvidesDashboard
 {
     public function key(): string
     {
@@ -45,5 +48,15 @@ class WeeklyEmailModule implements ModuleDefinition
     public function mcpInstructions(): string
     {
         return '';
+    }
+
+    public function dashboard(Team $team): array
+    {
+        return app(WeeklyEmailDashboard::class)->handle($team);
+    }
+
+    public function dashboardRoute(): string
+    {
+        return 'weekly-email.runs';
     }
 }
