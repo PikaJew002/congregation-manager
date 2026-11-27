@@ -165,7 +165,7 @@ const toggleMemberModule = (
                         Where your services happen. Dates you enter, here or
                         through an AI assistant, are days in this time zone, and
                         times are shown in it. It also sets each recording's
-                        date and the Weekly Email send time.
+                        date and when emails go out.
                     </p>
                     <InputError :message="errors.timezone" />
                 </div>
