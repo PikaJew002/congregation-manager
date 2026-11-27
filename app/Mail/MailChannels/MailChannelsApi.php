@@ -16,6 +16,9 @@ class MailChannelsApi
 {
     public const BASE_URL = 'https://api.mailchannels.net/tx/v1';
 
+    /** Failed webhook deliveries in a row before MailChannels emails the account. */
+    public const WEBHOOK_FAILURE_THRESHOLD = 5;
+
     public function __construct(private string $apiKey) {}
 
     /**
@@ -90,8 +93,14 @@ class MailChannelsApi
      */
     public function enrollWebhook(string $url): string
     {
+        // The endpoint goes in the query string. A JSON body must be an
+        // object (an empty post is sent as [], which MailChannels refuses),
+        // so it carries the failure threshold: MailChannels emails the
+        // account when the webhook fails this many times in a row. A 201
+        // means the webhook was created without the threshold.
         $response = $this->send(fn (PendingRequest $request) => $request->post(
             self::BASE_URL.'/webhook?endpoint='.rawurlencode($url),
+            ['failure_threshold' => self::WEBHOOK_FAILURE_THRESHOLD],
         ));
 
         if ($response->status() === 409) {

@@ -167,8 +167,22 @@ class MailChannelsWebhookTest extends TestCase
             ->assertInertiaFlash('toast.type', 'success');
 
         $this->assertTrue(EmailSending::deliveryEventsConnected($team->fresh()));
+        // MailChannels refuses a JSON array body, which an empty post sends.
         Http::assertSent(fn ($request) => $request->method() === 'POST'
-            && str_contains($request->url(), 'endpoint='.rawurlencode(route('webhooks.mailchannels'))));
+            && str_contains($request->url(), 'endpoint='.rawurlencode(route('webhooks.mailchannels')))
+            && $request->body() === '{"failure_threshold":5}');
+    }
+
+    public function test_a_webhook_created_without_its_failure_threshold_still_connects(): void
+    {
+        Http::fake(['api.mailchannels.net/tx/v1/webhook?*' => Http::response(null, 201)]);
+        [$team, $owner] = $this->owner();
+
+        $this->actingAs($owner)
+            ->post(route('teams.email-sending.delivery-events', $team->slug))
+            ->assertInertiaFlash('toast.type', 'success');
+
+        $this->assertTrue(EmailSending::deliveryEventsConnected($team->fresh()));
     }
 
     public function test_an_account_already_pointing_at_the_app_counts_as_connected(): void
