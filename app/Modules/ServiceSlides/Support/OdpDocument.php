@@ -27,6 +27,38 @@ trait OdpDocument
 
     private const OFFICE_SECTIONS = ['scripts', 'font-face-decls', 'styles', 'automatic-styles', 'master-styles', 'body'];
 
+    /** A deep copy of an element in its own document. */
+    private function cloneElement(DOMElement $element): DOMElement
+    {
+        $clone = $element->cloneNode(true);
+        if (! $clone instanceof DOMElement) {
+            throw new RuntimeException("Unable to copy <{$element->tagName}>.");
+        }
+
+        return $clone;
+    }
+
+    /** A deep copy of an element from another document, owned by $into. */
+    private function importElement(DOMDocument $into, DOMElement $element): DOMElement
+    {
+        $imported = $into->importNode($element, true);
+        if (! $imported instanceof DOMElement) {
+            throw new RuntimeException("Unable to import <{$element->tagName}>.");
+        }
+
+        return $imported;
+    }
+
+    private function xml(DOMDocument $dom): string
+    {
+        $xml = $dom->saveXML();
+        if ($xml === false) {
+            throw new RuntimeException('Unable to write the slide XML.');
+        }
+
+        return $xml;
+    }
+
     /**
      * @return list<DOMElement>
      */
@@ -158,8 +190,7 @@ trait OdpDocument
             'cm' => $number,
             'mm' => $number / 10,
             'in' => $number * 2.54,
-            'pt' => $number * 2.54 / 72,
-            default => null,
+            default => $number * 2.54 / 72, // pt
         };
     }
 
@@ -176,10 +207,14 @@ trait OdpDocument
         $files = [];
         for ($index = 0; $index < $zip->numFiles; $index++) {
             $name = $zip->getNameIndex($index);
-            if (str_ends_with($name, '/')) {
+            if ($name === false || str_ends_with($name, '/')) {
                 continue;
             }
-            $files[$name] = $zip->getFromIndex($index);
+            $contents = $zip->getFromIndex($index);
+            if ($contents === false) {
+                throw new RuntimeException("Unable to read {$name} from {$path}.");
+            }
+            $files[$name] = $contents;
         }
         $zip->close();
 

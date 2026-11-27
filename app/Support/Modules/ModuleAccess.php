@@ -23,7 +23,7 @@ class ModuleAccess
             ->where('module_key', $key)
             ->first();
 
-        return $setting?->enabled ?? true;
+        return $setting->enabled ?? true;
     }
 
     public function canUse(User $user, Team $team, string $key): bool
@@ -102,11 +102,12 @@ class ModuleAccess
      */
     public function grantsFor(Team $team, User $user): array
     {
-        return TeamModuleUser::query()
+        return array_values(TeamModuleUser::query()
             ->where('team_id', $team->id)
             ->where('user_id', $user->id)
-            ->pluck('module_key')
-            ->all();
+            ->get()
+            ->map(fn (TeamModuleUser $grant) => $grant->module_key)
+            ->all());
     }
 
     /**

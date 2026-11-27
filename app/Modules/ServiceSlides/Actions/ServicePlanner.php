@@ -175,7 +175,7 @@ class ServicePlanner
     }
 
     /**
-     * @param  list<array<string, mixed>>  $entries
+     * @param  array<array-key, array<string, mixed>>  $entries  Request input may not be a list; positions follow its order.
      */
     public function replaceEntries(ServiceDeck $deck, array $entries): void
     {
@@ -301,13 +301,13 @@ class ServicePlanner
      */
     private function currentEntries(ServiceDeck $deck): array
     {
-        return $deck->entries()->get()->map(fn ($entry) => [
+        return array_values($deck->entries()->get()->map(fn ($entry) => [
             'entry_type' => $entry->entry_type,
             'slide_template_slide_id' => $entry->slide_template_slide_id,
             'slide_source_id' => $entry->slide_source_id,
             'slot_key' => $entry->slot_key,
             'auto' => $entry->auto,
-        ])->all();
+        ])->all());
     }
 
     /**

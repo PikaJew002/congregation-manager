@@ -47,7 +47,7 @@ class ServiceController extends Controller
 
         foreach ($data['template_ids'] ?? [] as $templateId) {
             if (! $service->decks()->where('slide_template_id', $templateId)->exists()) {
-                $planner->createDeck($service, SlideTemplate::query()->findOrFail($templateId));
+                $planner->createDeck($service, SlideTemplate::query()->whereKey($templateId)->firstOrFail());
             }
         }
 
@@ -122,7 +122,7 @@ class ServiceController extends Controller
             ],
         ], ['template_id.unique' => 'This service already has a deck from that template.']);
 
-        $deck = $planner->createDeck($service, SlideTemplate::query()->findOrFail($data['template_id']));
+        $deck = $planner->createDeck($service, SlideTemplate::query()->whereKey($data['template_id'])->firstOrFail());
 
         Inertia::flash('deck', $deck->id);
 
@@ -203,7 +203,7 @@ class ServiceController extends Controller
                 continue;
             }
 
-            $columns = array_map('trim', str_getcsv($line));
+            $columns = array_map(fn (?string $column) => trim($column ?? ''), str_getcsv($line));
             if (count($columns) === 3) {
                 array_splice($columns, 2, 0, ['']);
             }

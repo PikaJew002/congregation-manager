@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('zoom_recording_settings', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('team_id')->constrained()->cascadeOnDelete()->unique();
+            $table->foreignId('team_id')->unique()->constrained()->cascadeOnDelete();
             $table->text('webhook_secret')->nullable();
             $table->string('r2_prefix')->default('recordings');
             $table->string('public_base_url')->nullable();

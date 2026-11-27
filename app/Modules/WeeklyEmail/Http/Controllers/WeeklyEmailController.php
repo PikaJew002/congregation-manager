@@ -42,7 +42,7 @@ class WeeklyEmailController extends Controller
             'entries' => ['required', 'string'],
         ]);
 
-        foreach (preg_split('/\r\n|\r|\n/', $data['entries']) as $line) {
+        foreach (explode("\n", str_replace(["\r\n", "\r"], "\n", $data['entries'])) as $line) {
             $line = trim($line);
             if ($line === '') {
                 continue;

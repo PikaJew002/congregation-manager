@@ -23,7 +23,7 @@ return new class extends Migration
 
         Schema::create('weekly_email_settings', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('team_id')->constrained()->cascadeOnDelete()->unique();
+            $table->foreignId('team_id')->unique()->constrained()->cascadeOnDelete();
             $table->boolean('enabled')->default(false);
             $table->string('subject')->default('This week on Zoom');
             $table->text('body');

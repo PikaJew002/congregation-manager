@@ -376,6 +376,20 @@ class WeeklyEmailTest extends TestCase
         $this->assertSame('subscribed', EmailRecipient::query()->where('email', 'b@example.com')->value('status'));
     }
 
+    public function test_pasted_recipients_can_use_any_line_ending(): void
+    {
+        [$team, $owner] = $this->owner();
+
+        $this->actingAs($owner)
+            ->post(route('weekly-email.recipients.store', $team->slug), ['entries' => "a@example.com, Ann\r\nb@example.com\rc@example.com\n"])
+            ->assertRedirect();
+
+        $this->assertSame(
+            ['a@example.com', 'b@example.com', 'c@example.com'],
+            EmailRecipient::query()->forTeam($team)->orderBy('email')->pluck('email')->all(),
+        );
+    }
+
     public function test_a_bounced_address_can_be_resubscribed(): void
     {
         [$team, $owner] = $this->owner();

@@ -108,8 +108,8 @@ class SongSlideFormatter
         }
 
         $this->whitenText($pages);
-        $files['content.xml'] = $this->content->saveXML();
-        $files['styles.xml'] = $this->styles->saveXML();
+        $files['content.xml'] = $this->xml($this->content);
+        $files['styles.xml'] = $this->xml($this->styles);
         $this->writeZip($destination, $files);
 
         return $notes;
@@ -250,7 +250,7 @@ class SongSlideFormatter
             $name = $base.'-'.$suffix;
         }
 
-        $copy = $master->cloneNode(true);
+        $copy = $this->cloneElement($master);
         $copy->setAttributeNS(self::STYLE, 'style:name', $name);
         $copy->removeAttributeNS(self::STYLE, 'display-name');
         $master->parentNode->insertBefore($copy, $master->nextSibling);
@@ -270,7 +270,7 @@ class SongSlideFormatter
         $oldName = $master->getAttributeNS(self::DRAW, 'style-name');
         $old = $oldName !== '' ? $this->namedStyle($this->styles, $oldName) : null;
         if ($old) {
-            $style = $old->cloneNode(true);
+            $style = $this->cloneElement($old);
         } else {
             $style = $this->styles->createElementNS(self::STYLE, 'style:style');
             $style->setAttributeNS(self::STYLE, 'style:family', 'drawing-page');
@@ -872,7 +872,7 @@ class SongSlideFormatter
         if (! isset($this->clones[$key])) {
             $source = $this->automaticStyle($name, $family);
             if ($source) {
-                $style = $source->cloneNode(true);
+                $style = $this->cloneElement($source);
             } else {
                 $style = $this->content->createElementNS(self::STYLE, 'style:style');
                 $style->setAttributeNS(self::STYLE, 'style:family', $family);

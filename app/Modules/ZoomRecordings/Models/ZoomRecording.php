@@ -6,7 +6,35 @@ use App\Models\Concerns\BelongsToTeam;
 use App\Support\HebrewCalendar;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $id
+ * @property int $team_id
+ * @property string $meeting_uuid
+ * @property string|null $meeting_id
+ * @property string $title
+ * @property string|null $service
+ * @property string|null $speaker
+ * @property string|null $torah_portion
+ * @property array<string, mixed>|null $hebcal
+ * @property Carbon|null $recorded_at
+ * @property int|null $duration_minutes
+ * @property string|null $download_url
+ * @property string|null $download_token
+ * @property string|null $recording_file_id
+ * @property string $status
+ * @property string|null $failed_step
+ * @property string|null $media_step
+ * @property string|null $error
+ * @property string|null $source_path
+ * @property int|null $source_height
+ * @property string|null $hls_path
+ * @property Carbon|null $archived_at
+ * @property list<array{at: string, message: string}>|null $log
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ */
 class ZoomRecording extends Model
 {
     use BelongsToTeam;

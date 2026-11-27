@@ -5,6 +5,7 @@ namespace App\Modules\ServiceSlides\Jobs;
 use App\Modules\ServiceSlides\Models\ServiceDeck;
 use App\Modules\ServiceSlides\Models\ServiceDeckEntry;
 use App\Modules\ServiceSlides\Support\SlideFormats;
+use App\Support\LocalFile;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Storage;
@@ -71,7 +72,7 @@ class GenerateServiceDeck implements ShouldQueue
             $output = $work.'/deck.'.$format;
             $warnings = $formats->builder($format)->build($templatePath, $entries, $output);
             $stored = 'decks/'.$deck->service->team_id.'/'.$deck->id.'.'.$format;
-            Storage::disk('files')->put($stored, file_get_contents($output));
+            Storage::disk('files')->put($stored, LocalFile::read($output));
             $changed = $deck->fresh()->status !== 'generating';
             $deck->update([
                 'generated_path' => $stored,
