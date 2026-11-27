@@ -61,7 +61,7 @@ class GetService extends Tool
                 'status' => $deck->status,
                 'blocked' => $deck->blocked,
                 'items' => $deck->entries->map(fn ($entry) => [
-                    'title' => $entry->source?->title ?? $entry->templateSlide?->label,
+                    'title' => $entry->source->title ?? $entry->templateSlide?->label,
                     'type' => $entry->entry_type,
                     'slot' => $entry->slot_key,
                 ])->all(),

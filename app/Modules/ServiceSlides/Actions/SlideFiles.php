@@ -10,11 +10,13 @@ use App\Modules\ServiceSlides\Support\Preset;
 use App\Modules\ServiceSlides\Support\SearchText;
 use App\Modules\ServiceSlides\Support\SlideFormats;
 use App\Modules\ServiceSlides\Support\SongSlideFormatter;
+use App\Support\LocalFile;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class SlideFiles
@@ -141,6 +143,18 @@ class SlideFiles
         $template->slides()->where('slide_index', '>=', count($slides))->update(['missing' => true]);
     }
 
+    /** Stores an upload on the files disk under a random name, or throws if it cannot. */
+    private function store(UploadedFile $file, string $directory, string $format): string
+    {
+        $path = $file->storeAs($directory, Str::random(40).'.'.$format, 'files');
+
+        if ($path === false) {
+            throw new RuntimeException("Unable to store {$file->getClientOriginalName()}.");
+        }
+
+        return $path;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -150,7 +164,7 @@ class SlideFiles
         $format = $this->formats->detect($local) ?? 'odp';
         $inspector = $this->formats->inspector($format);
         $slides = $inspector->usedSlides($inspector->slides($local));
-        $original = $file->storeAs('slides/'.$team->id, Str::random(40).'.'.$format, 'files');
+        $original = $this->store($file, 'slides/'.$team->id, $format);
 
         return [
             'original_path' => $original,
@@ -210,7 +224,7 @@ class SlideFiles
         try {
             $notes = $this->formatter->format($local, $formatted);
             $path = 'slides/'.$teamId.'/'.Str::random(40).'.odp';
-            Storage::disk('files')->put($path, file_get_contents($formatted));
+            Storage::disk('files')->put($path, LocalFile::read($formatted));
 
             return [$path, $notes];
         } catch (Throwable $exception) {
@@ -235,7 +249,7 @@ class SlideFiles
         $format = $this->formats->detect($file->getRealPath()) ?? 'odp';
 
         return [
-            'file_path' => $file->storeAs('templates/'.$team->id, Str::random(40).'.'.$format, 'files'),
+            'file_path' => $this->store($file, 'templates/'.$team->id, $format),
             'format' => $format,
             'page_size' => $this->formats->inspector($format)->pageSize($file->getRealPath()),
             'file_updated_at' => now(),

@@ -27,11 +27,7 @@ class SlideLinkDownloader
             $response = $this->get($downloadUrl, $provider);
 
             if ($provider === 'drive' && $this->looksLikeHtml($response->body())) {
-                $confirmUrl = $this->driveConfirmUrl($downloadUrl, $response);
-
-                if ($confirmUrl !== null) {
-                    $response = $this->get($confirmUrl, $provider);
-                }
+                $response = $this->get($this->driveConfirmUrl($downloadUrl, $response), $provider);
             }
         } catch (InvalidArgumentException $exception) {
             return $exception->getMessage();
@@ -135,7 +131,7 @@ class SlideLinkDownloader
         return null;
     }
 
-    private function driveConfirmUrl(string $downloadUrl, Response $response): ?string
+    private function driveConfirmUrl(string $downloadUrl, Response $response): string
     {
         $body = $response->body();
         $confirm = null;
@@ -243,7 +239,7 @@ class SlideLinkDownloader
     {
         $disposition = $response->header('Content-Disposition');
 
-        if (is_string($disposition) && preg_match('/filename\*?=(?:UTF-8\'\')?"?([^";]+)"?/i', $disposition, $matches)) {
+        if (preg_match('/filename\*?=(?:UTF-8\'\')?"?([^";]+)"?/i', $disposition, $matches)) {
             $name = rawurldecode(trim($matches[1], " \t\"'"));
 
             if ($name !== '') {

@@ -97,7 +97,7 @@ class LibraryController extends Controller
         $upload = $this->presentationUpload($request, $links, $formats, kind: $data['kind']);
 
         try {
-            $source = $files->createSource($current_team, $upload, collect($data)->all());
+            $source = $files->createSource($current_team, $upload, $data);
         } finally {
             $this->forgetTemporaryUpload($upload, $request);
         }

@@ -13,6 +13,10 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Symfony\Component\Mailer\Envelope;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\RawMessage;
 use Tests\TestCase;
 
 class MailChannelsTransportTest extends TestCase
@@ -49,6 +53,22 @@ class MailChannelsTransportTest extends TestCase
                 && $body['subject'] === 'Weekly link'
                 && count($body['personalizations'][0]['to']) === 1;
         });
+    }
+
+    public function test_it_refuses_raw_mime_without_calling_mailchannels(): void
+    {
+        Http::fake();
+
+        $this->expectException(TransportException::class);
+
+        try {
+            (new MailChannelsTransport('test-key'))->send(
+                new RawMessage("Subject: Hi\r\n\r\nHello"),
+                new Envelope(new Address('news@example.com'), [new Address('member@example.com')]),
+            );
+        } finally {
+            Http::assertNothingSent();
+        }
     }
 
     public function test_platform_mail_leaves_transactional_and_tracking_to_mailchannels(): void

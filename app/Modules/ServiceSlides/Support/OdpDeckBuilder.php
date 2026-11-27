@@ -37,12 +37,12 @@ class OdpDeckBuilder implements DeckBuilder
 
                     continue;
                 }
-                $pages[] = $sourcePages[$slideIndex]->cloneNode(true);
+                $pages[] = $this->cloneElement($sourcePages[$slideIndex]);
 
                 continue;
             }
 
-            if ($entry['type'] !== 'source') {
+            if ($entry['type'] !== 'source' || ! isset($entry['path'])) {
                 $warnings[] = 'Unknown deck entry.';
 
                 continue;
@@ -66,8 +66,8 @@ class OdpDeckBuilder implements DeckBuilder
 
         $this->replacePages($content, $pages);
         $this->uniquifyIds($content, $styles);
-        $files['content.xml'] = $content->saveXML();
-        $files['styles.xml'] = $styles->saveXML();
+        $files['content.xml'] = $this->xml($content);
+        $files['styles.xml'] = $this->xml($styles);
         $files['META-INF/manifest.xml'] = $this->manifest($files);
         $this->writeZip($destination, $files);
 
@@ -78,6 +78,7 @@ class OdpDeckBuilder implements DeckBuilder
      * @param  array<string, string>  $files
      * @param  array<string, string>  $imageHashes
      * @param  array<string, string>  $masterHashes
+     * @param  array{width: float, height: float}|null  $templateSize
      * @param  list<int>|null  $onlySlides
      * @return array{pages: list<DOMElement>, warnings: list<string>}
      */
@@ -132,7 +133,7 @@ class OdpDeckBuilder implements DeckBuilder
             if (! in_array($page, $selected, true)) {
                 continue;
             }
-            $pages[] = $content->importNode($page, true);
+            $pages[] = $this->importElement($content, $page);
         }
 
         return ['pages' => $pages, 'warnings' => $warnings];
@@ -178,7 +179,7 @@ class OdpDeckBuilder implements DeckBuilder
         $names = [];
         foreach ([$content, $styles] as $dom) {
             foreach ($dom->getElementsByTagName('*') as $element) {
-                if (! $element instanceof DOMElement || ! $attribute = $this->nameAttribute($element)) {
+                if (! $attribute = $this->nameAttribute($element)) {
                     continue;
                 }
                 $name = $element->getAttributeNS($attribute[0], 'name');
@@ -215,7 +216,7 @@ class OdpDeckBuilder implements DeckBuilder
     private function renameDefinedNames(DOMDocument $dom, array $renames): void
     {
         foreach ($dom->getElementsByTagName('*') as $element) {
-            if (! $element instanceof DOMElement || ! $attribute = $this->nameAttribute($element)) {
+            if (! $attribute = $this->nameAttribute($element)) {
                 continue;
             }
             $name = $element->getAttributeNS($attribute[0], 'name');
@@ -250,7 +251,7 @@ class OdpDeckBuilder implements DeckBuilder
         ];
 
         foreach ($dom->getElementsByTagName('*') as $element) {
-            if (! $element instanceof DOMElement || ! $element->hasAttributes()) {
+            if (! $element->hasAttributes()) {
                 continue;
             }
             foreach (iterator_to_array($element->attributes) as $attribute) {
@@ -383,9 +384,6 @@ class OdpDeckBuilder implements DeckBuilder
     private function replaceMasterName(DOMDocument $dom, string $from, string $to): void
     {
         foreach ($dom->getElementsByTagName('*') as $element) {
-            if (! $element instanceof DOMElement) {
-                continue;
-            }
             $value = $element->getAttributeNS(self::DRAW, 'master-page-name');
             if ($value === $from) {
                 $element->setAttributeNS(self::DRAW, 'draw:master-page-name', $to);
@@ -470,9 +468,9 @@ class OdpDeckBuilder implements DeckBuilder
         // PowerPoint ignores every draw:page that follows presentation:settings.
         $before = $settings?->parentNode === $parent ? $settings : null;
 
-        foreach (array_values($pages) as $index => $page) {
+        foreach ($pages as $index => $page) {
             if ($page->ownerDocument !== $content) {
-                $page = $content->importNode($page, true);
+                $page = $this->importElement($content, $page);
             }
             $page->setAttributeNS(self::DRAW, 'draw:name', 'page'.($index + 1));
             $parent?->insertBefore($page, $before);
@@ -532,9 +530,6 @@ class OdpDeckBuilder implements DeckBuilder
     private function scaleGeometry(DOMDocument $dom, float $scale): void
     {
         foreach ($dom->getElementsByTagName('*') as $element) {
-            if (! $element instanceof DOMElement) {
-                continue;
-            }
             foreach (['x', 'y', 'width', 'height'] as $attribute) {
                 $value = $element->getAttributeNS(self::SVG, $attribute);
                 if ($value === '' || ! preg_match('/^(-?\d+(?:\.\d+)?)(cm|in|mm|pt)$/', $value, $matches)) {
@@ -603,7 +598,7 @@ class OdpDeckBuilder implements DeckBuilder
             $root->appendChild($entry);
         }
 
-        return $dom->saveXML();
+        return $this->xml($dom);
     }
 
     private function mediaType(string $name): string

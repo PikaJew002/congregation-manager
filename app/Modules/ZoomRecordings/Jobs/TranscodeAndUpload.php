@@ -3,6 +3,8 @@
 namespace App\Modules\ZoomRecordings\Jobs;
 
 use App\Modules\ZoomRecordings\Models\ZoomRecording;
+use App\Support\LocalFile;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Process;
@@ -32,7 +34,7 @@ class TranscodeAndUpload implements ShouldQueue
                 mkdir($work, 0755, true);
             }
             $source = Storage::disk('files')->readStream($recording->source_path);
-            $local = fopen($input, 'w');
+            $local = LocalFile::open($input, 'w');
             stream_copy_to_stream($source, $local);
             fclose($local);
             if (is_resource($source)) {
@@ -40,8 +42,8 @@ class TranscodeAndUpload implements ShouldQueue
             }
 
             $result = Process::timeout(7200)->env([
-                'FFMPEG_BINARY' => env('FFMPEG_BINARY', 'ffmpeg'),
-                'FFPROBE_BINARY' => env('FFPROBE_BINARY', 'ffprobe'),
+                'FFMPEG_BINARY' => config('services.ffmpeg.ffmpeg'),
+                'FFPROBE_BINARY' => config('services.ffmpeg.ffprobe'),
             ])->run([base_path('scripts/hls_package.sh'), $input, $work.'/hls']);
 
             if ($result->failed()) {
@@ -55,13 +57,13 @@ class TranscodeAndUpload implements ShouldQueue
 
             foreach ($iterator as $file) {
                 $relative = substr($file->getPathname(), strlen($work.'/hls/'));
-                $disk->put($directory.'/'.$relative, fopen($file->getPathname(), 'r'), [
+                $this->upload($disk, $directory.'/'.$relative, $file->getPathname(), [
                     'ContentType' => $this->contentType($file->getFilename()),
                     'CacheControl' => str_ends_with($file->getFilename(), '.m3u8') ? 'public, max-age=60' : 'public, max-age=31536000',
                 ]);
             }
 
-            $disk->put($directory.'/source.mp4', fopen($input, 'r'), [
+            $this->upload($disk, $directory.'/source.mp4', $input, [
                 'ContentType' => 'video/mp4',
             ]);
 
@@ -72,6 +74,25 @@ class TranscodeAndUpload implements ShouldQueue
             throw $exception;
         } finally {
             $this->deleteTree($work);
+        }
+    }
+
+    /**
+     * Streams a local file to the disk and closes it afterwards.
+     *
+     * @param  array<string, string>  $options
+     */
+    private function upload(Filesystem $disk, string $path, string $local, array $options): void
+    {
+        $stream = LocalFile::open($local);
+
+        try {
+            $disk->put($path, $stream, $options);
+        } finally {
+            // The S3 client can close the stream itself once the upload is done.
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
         }
     }
 

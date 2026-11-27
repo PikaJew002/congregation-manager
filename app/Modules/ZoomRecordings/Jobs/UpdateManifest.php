@@ -24,9 +24,10 @@ class UpdateManifest implements ShouldQueue
         $prefix = trim($settings->r2_prefix, '/');
         $disk = Storage::disk('r2-public');
         $path = $prefix.'/recordings.json';
-        $existing = $disk->exists($path) ? json_decode($disk->get($path), true) : ['recordings' => []];
+        $existing = $disk->exists($path) ? json_decode((string) $disk->get($path), true) : null;
+        $recordings = is_array($existing) && is_array($existing['recordings'] ?? null) ? $existing['recordings'] : [];
         $base = rtrim((string) $settings->public_base_url, '/');
-        $items = collect($existing['recordings'] ?? [])->reject(fn ($item) => ($item['id'] ?? null) === $recording->id)->values();
+        $items = collect($recordings)->reject(fn ($item) => ($item['id'] ?? null) === $recording->id)->values();
 
         if (! $recording->isArchived()) {
             $items->prepend([
@@ -49,7 +50,7 @@ class UpdateManifest implements ShouldQueue
         // Undated entries go last.
         $items = $items->sort(fn (array $a, array $b) => [$b['date'] ?? '', $b['id'] ?? 0] <=> [$a['date'] ?? '', $a['id'] ?? 0])->values();
 
-        $disk->put($path, json_encode(['recordings' => $items->all()], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), [
+        $disk->put($path, json_encode(['recordings' => $items->all()], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), [
             'ContentType' => 'application/json',
             'CacheControl' => 'public, max-age=60',
         ]);

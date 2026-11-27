@@ -12,6 +12,7 @@ use Symfony\Component\Mailer\SentMessage;
 use Symfony\Component\Mailer\Transport\AbstractTransport;
 use Symfony\Component\Mime\Address;
 use Symfony\Component\Mime\Email;
+use Symfony\Component\Mime\Message;
 use Symfony\Component\Mime\MessageConverter;
 
 /**
@@ -50,7 +51,13 @@ class MailChannelsTransport extends AbstractTransport
 
     protected function doSend(SentMessage $message): void
     {
-        $email = MessageConverter::toEmail($message->getOriginalMessage());
+        $original = $message->getOriginalMessage();
+
+        if (! $original instanceof Message) {
+            throw new TransportException('MailChannels can only send structured messages, not raw MIME.');
+        }
+
+        $email = MessageConverter::toEmail($original);
         $recipients = $email->getTo();
 
         if (count($recipients) !== 1) {

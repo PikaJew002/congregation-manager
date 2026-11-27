@@ -95,7 +95,7 @@ class ZoomWebhookController extends Controller
      */
     private function preferredFile(array $object, string $preferred): ?array
     {
-        $files = collect($object['recording_files'] ?? [])->filter(fn ($file) => ($file['file_type'] ?? null) === 'MP4');
+        $files = collect(is_array($object['recording_files'] ?? null) ? $object['recording_files'] : [])->filter(fn ($file) => ($file['file_type'] ?? null) === 'MP4');
         $match = $files->firstWhere('recording_type', $preferred);
 
         return $match ?: $files->first();

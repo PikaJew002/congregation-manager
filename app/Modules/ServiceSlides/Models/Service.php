@@ -30,6 +30,9 @@ class Service extends Model
         return ['service_date' => 'date:Y-m-d'];
     }
 
+    /**
+     * @return HasMany<ServiceDeck, $this>
+     */
     public function decks(): HasMany
     {
         return $this->hasMany(ServiceDeck::class)->orderBy('position');

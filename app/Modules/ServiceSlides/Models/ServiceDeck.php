@@ -3,6 +3,7 @@
 namespace App\Modules\ServiceSlides\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -23,6 +24,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Service $service
+ * @property-read SlideTemplate $template
+ * @property-read Collection<int, ServiceDeckEntry> $entries
  */
 class ServiceDeck extends Model
 {
@@ -41,16 +44,25 @@ class ServiceDeck extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Service, $this>
+     */
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
     }
 
+    /**
+     * @return BelongsTo<SlideTemplate, $this>
+     */
     public function template(): BelongsTo
     {
         return $this->belongsTo(SlideTemplate::class, 'slide_template_id');
     }
 
+    /**
+     * @return HasMany<ServiceDeckEntry, $this>
+     */
     public function entries(): HasMany
     {
         return $this->hasMany(ServiceDeckEntry::class)->orderBy('position');
@@ -65,6 +77,9 @@ class ServiceDeck extends Model
         ]);
     }
 
+    /**
+     * @param  Builder<ServiceDeck>  $query
+     */
     public function scopeUsingSource(Builder $query, int $sourceId): void
     {
         $query->whereHas('entries', fn (Builder $entries) => $entries->where('slide_source_id', $sourceId));

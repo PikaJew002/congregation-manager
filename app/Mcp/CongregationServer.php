@@ -6,6 +6,7 @@ use App\Support\Modules\ModuleRegistry;
 use Laravel\Mcp\Server;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Attributes\Version;
+use Laravel\Mcp\Server\Tool;
 
 /**
  * One MCP server for a congregation. Each module contributes its own tools
@@ -46,9 +47,18 @@ class CongregationServer extends Server
         $this->instructions = implode("\n\n", $sections);
     }
 
-    /** For tests and tooling: every module's tools, before filtering. */
+    /**
+     * For tests and tooling: every module's tools, before filtering.
+     *
+     * @return list<class-string<Tool>>
+     */
     public static function registeredTools(): array
     {
-        return collect(app(ModuleRegistry::class)->all())->flatMap->mcpTools()->values()->all();
+        $tools = [];
+        foreach (app(ModuleRegistry::class)->all() as $module) {
+            array_push($tools, ...$module->mcpTools());
+        }
+
+        return $tools;
     }
 }
