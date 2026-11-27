@@ -40,7 +40,7 @@ void createInertiaApp({
         switch (true) {
             case name.startsWith('auth/'):
             case name.startsWith('invitations/'):
-            case name === 'weekly-email/Unsubscribe':
+            case name === 'email/Unsubscribe':
                 return AuthLayout;
             case name.startsWith('settings/'):
             case name.startsWith('teams/'):

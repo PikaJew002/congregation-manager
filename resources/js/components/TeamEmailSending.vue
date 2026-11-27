@@ -114,7 +114,7 @@ const submit = () => {
         <Heading
             variant="small"
             title="Email sending"
-            description="The congregation's own MailChannels account. Every email the congregation sends, such as the weekly email, goes out through it."
+            description="The congregation's own MailChannels account. Every email the congregation sends, such as the Shabbat invite or a newsletter, goes out through it."
         />
 
         <form class="space-y-6" @submit.prevent="submit">

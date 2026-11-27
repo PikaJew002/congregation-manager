@@ -3,7 +3,7 @@
 namespace Tests\Feature\Modules;
 
 use App\Models\Team;
-use App\Modules\WeeklyEmail\Models\WeeklyEmailSetting;
+use App\Modules\Email\Models\EmailSetting;
 use App\Modules\ZoomRecordings\Models\ZoomRecordingSetting;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -16,16 +16,16 @@ class OneSettingsRowPerTeamTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @return array<string, array{class-string<WeeklyEmailSetting|ZoomRecordingSetting>}> */
+    /** @return array<string, array{class-string<EmailSetting|ZoomRecordingSetting>}> */
     public static function settingsModels(): array
     {
         return [
-            'weekly email' => [WeeklyEmailSetting::class],
+            'email' => [EmailSetting::class],
             'zoom recordings' => [ZoomRecordingSetting::class],
         ];
     }
 
-    /** @param class-string<WeeklyEmailSetting|ZoomRecordingSetting> $model */
+    /** @param class-string<EmailSetting|ZoomRecordingSetting> $model */
     #[DataProvider('settingsModels')]
     public function test_a_congregation_can_only_have_one_settings_row(string $model): void
     {
@@ -35,8 +35,21 @@ class OneSettingsRowPerTeamTest extends TestCase
         $settings->replicate()->save();
     }
 
-    /** @param class-string<WeeklyEmailSetting|ZoomRecordingSetting> $model */
-    #[DataProvider('settingsModels')]
+    /**
+     * The Email module's version of this migration ran on its table's old
+     * name, weekly_email_settings, before it was renamed.
+     *
+     * @return array<string, array{class-string<ZoomRecordingSetting>}>
+     */
+    public static function migratedSettingsModels(): array
+    {
+        return [
+            'zoom recordings' => [ZoomRecordingSetting::class],
+        ];
+    }
+
+    /** @param class-string<ZoomRecordingSetting> $model */
+    #[DataProvider('migratedSettingsModels')]
     public function test_the_migration_keeps_each_congregations_oldest_row(string $model): void
     {
         $table = (new $model)->getTable();
@@ -47,8 +60,7 @@ class OneSettingsRowPerTeamTest extends TestCase
         $kept->replicate()->save();
         $other = $model::forTeam(Team::factory()->create());
 
-        $module = $model === WeeklyEmailSetting::class ? 'WeeklyEmail' : 'ZoomRecordings';
-        $migration = glob(app_path("Modules/{$module}/database/migrations/*_add_unique_team_index_to_{$table}.php"))[0];
+        $migration = glob(app_path("Modules/ZoomRecordings/database/migrations/*_add_unique_team_index_to_{$table}.php"))[0];
         (require $migration)->up();
 
         $this->assertSame([$kept->id], $model::query()->where('team_id', $first->id)->pluck('id')->all());

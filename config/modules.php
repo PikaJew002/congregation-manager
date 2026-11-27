@@ -1,7 +1,7 @@
 <?php
 
+use App\Modules\Email\EmailServiceProvider;
 use App\Modules\ServiceSlides\ServiceSlidesServiceProvider;
-use App\Modules\WeeklyEmail\WeeklyEmailServiceProvider;
 use App\Modules\ZoomRecordings\ZoomRecordingsServiceProvider;
 
 return [
@@ -17,7 +17,7 @@ return [
     */
 
     'providers' => [
-        WeeklyEmailServiceProvider::class,
+        EmailServiceProvider::class,
         ZoomRecordingsServiceProvider::class,
         ServiceSlidesServiceProvider::class,
     ],

@@ -5,12 +5,12 @@ namespace Tests\Feature;
 use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
+use App\Modules\Email\Actions\EmailDashboard;
+use App\Modules\Email\Models\Email;
+use App\Modules\Email\Models\EmailRecipient;
+use App\Modules\Email\Models\EmailRun;
 use App\Modules\ServiceSlides\Models\Service;
 use App\Modules\ServiceSlides\Models\SlideTemplate;
-use App\Modules\WeeklyEmail\Actions\WeeklyEmailDashboard;
-use App\Modules\WeeklyEmail\Models\EmailRecipient;
-use App\Modules\WeeklyEmail\Models\EmailRun;
-use App\Modules\WeeklyEmail\Models\WeeklyEmailSetting;
 use App\Modules\ZoomRecordings\Models\ZoomRecording;
 use App\Support\Modules\ModuleAccess;
 use Carbon\CarbonImmutable;
@@ -43,7 +43,7 @@ class DashboardCardsTest extends TestCase
         $this->dashboard($this->owner)->assertInertia(fn (Assert $page) => $page
             ->component('Dashboard')
             ->has('cards', 3)
-            ->where('cards', fn ($cards) => collect($cards)->pluck('key')->sort()->values()->all() === ['service-slides', 'weekly-email', 'zoom-recordings']),
+            ->where('cards', fn ($cards) => collect($cards)->pluck('key')->sort()->values()->all() === ['email', 'service-slides', 'zoom-recordings']),
         );
     }
 
@@ -54,11 +54,11 @@ class DashboardCardsTest extends TestCase
 
         $this->dashboard($member)->assertInertia(fn (Assert $page) => $page->has('cards', 0));
 
-        app(ModuleAccess::class)->grant($this->team, $member, 'weekly-email');
+        app(ModuleAccess::class)->grant($this->team, $member, 'email');
 
         $this->dashboard($member)->assertInertia(fn (Assert $page) => $page
             ->has('cards', 1)
-            ->where('cards.0.key', 'weekly-email'));
+            ->where('cards.0.key', 'email'));
     }
 
     public function test_a_module_turned_off_for_the_congregation_has_no_card(): void
@@ -113,9 +113,10 @@ class DashboardCardsTest extends TestCase
         $this->assertCount(1, $card['activity']);
     }
 
-    public function test_the_weekly_email_card_shows_the_next_send_and_failed_deliveries(): void
+    public function test_the_email_card_shows_the_next_send_and_failed_deliveries(): void
     {
-        WeeklyEmailSetting::forTeam($this->team)->update(['enabled' => true, 'send_day' => 5, 'send_time' => '09:00', 'subject' => 'Shabbat on Zoom']);
+        $this->email(['name' => 'Shabbat invite', 'send_days' => [5]]);
+        $this->email(['name' => 'Sunday school', 'send_days' => [0]]);
         $ann = EmailRecipient::query()->create(['team_id' => $this->team->id, 'email' => 'ann@example.com']);
         EmailRecipient::query()->create(['team_id' => $this->team->id, 'email' => 'bo@example.com', 'status' => 'unsubscribed', 'unsubscribed_at' => now()->subDays(3)]);
 
@@ -124,30 +125,49 @@ class DashboardCardsTest extends TestCase
         $cy = EmailRecipient::query()->create(['team_id' => $this->team->id, 'email' => 'cy@example.com']);
         $run->deliveries()->create(['email_recipient_id' => $cy->id, 'scheduled_at' => '2026-11-20 14:01:00', 'status' => 'failed']);
 
-        $card = $this->card('weekly-email');
+        $card = $this->card('email');
 
         $this->assertSame('Next email Friday, Nov 27 at 9:00 AM', $card['headline']['title']);
+        $this->assertSame('Shabbat invite', $card['headline']['detail']);
         $this->assertSame(['2', '1', '1 of 2'], array_column($card['stats'], 'value'));
-        $this->assertSame('1 weekly email failed to send', $card['attention'][0]['title']);
+        $this->assertSame('1 email failed to send', $card['attention'][0]['title']);
     }
 
-    public function test_the_weekly_email_card_does_not_create_settings(): void
+    public function test_the_email_card_does_not_create_settings(): void
     {
-        $card = $this->card('weekly-email');
+        $card = $this->card('email');
 
         $this->assertSame('Not scheduled', $card['headline']['title']);
-        $this->assertDatabaseMissing('weekly_email_settings', ['team_id' => $this->team->id]);
+        $this->assertDatabaseMissing('email_settings', ['team_id' => $this->team->id]);
     }
 
-    public function test_the_next_send_moves_to_next_week_once_todays_window_has_opened(): void
+    public function test_the_next_send_moves_to_next_week_once_todays_time_has_passed(): void
     {
-        $settings = new WeeklyEmailSetting(['send_day' => 3, 'send_time' => '09:00']);
-        $dashboard = app(WeeklyEmailDashboard::class);
+        $email = new Email(['send_mode' => 'recurring', 'send_days' => [3], 'send_time' => '09:00']);
+        $dashboard = app(EmailDashboard::class);
 
-        $this->assertSame('2026-12-02 09:00', $dashboard->nextSend($settings, $this->team)->format('Y-m-d H:i'));
+        $this->assertSame('2026-12-02 09:00', $dashboard->nextSend([$email], $this->team)[1]->format('Y-m-d H:i'));
 
-        $settings->send_time = '11:00';
-        $this->assertSame('2026-11-25 11:00', $dashboard->nextSend($settings, $this->team)->format('Y-m-d H:i'));
+        $email->send_time = '11:00';
+        $this->assertSame('2026-11-25 11:00', $dashboard->nextSend([$email], $this->team)[1]->format('Y-m-d H:i'));
+    }
+
+    /**
+     * A scheduled recurring email at 9:00.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    private function email(array $attributes): Email
+    {
+        return Email::query()->create([
+            'team_id' => $this->team->id,
+            'status' => 'scheduled',
+            'send_mode' => 'recurring',
+            'subject' => 'Shabbat on Zoom',
+            'body' => 'Hi',
+            'send_time' => '09:00',
+            ...$attributes,
+        ]);
     }
 
     private function dashboard(User $user)
