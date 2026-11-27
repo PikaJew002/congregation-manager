@@ -59,7 +59,7 @@ class EmailController extends Controller
         ]);
     }
 
-    public function create(Team $current_team): Response
+    public function create(Request $request, Team $current_team): Response
     {
         $email = new Email([
             'name' => '',
@@ -71,6 +71,16 @@ class EmailController extends Controller
             'send_days' => [],
             'send_time' => '09:00',
         ]);
+
+        if ($request->query('template') === 'letter') {
+            $email->fill([
+                'name' => 'Newsletter',
+                'send_mode' => Email::ONCE,
+                'subject' => 'A note for {{date|F}}',
+                'body' => (string) file_get_contents(__DIR__.'/../../templates/letter.md'),
+                'variables' => [['key' => 'signed_by', 'value' => EmailSetting::forTeam($current_team)->from_name ?? $current_team->name]],
+            ]);
+        }
 
         return $this->editor($current_team, $email);
     }
