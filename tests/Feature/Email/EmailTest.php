@@ -210,6 +210,37 @@ class EmailTest extends TestCase
         $this->assertSame('completed', $run->fresh()->status);
     }
 
+    public function test_the_letter_template_starts_a_one_time_newsletter_that_previews_cleanly(): void
+    {
+        [$team, $owner] = $this->owner();
+        EmailSetting::forTeam($team)->update(['from_name' => 'Beth Shalom']);
+        config(['inertia.testing.ensure_pages_exist' => false]);
+
+        $email = null;
+
+        $this->actingAs($owner)
+            ->get(route('email.create', ['current_team' => $team->slug, 'template' => 'letter']))
+            ->assertOk()
+            ->assertInertia(function (Assert $page) use (&$email) {
+                $page->component('email/Edit')
+                    ->where('email.send_mode', Email::ONCE)
+                    ->where('email.variables', [['key' => 'signed_by', 'value' => 'Beth Shalom']]);
+                $email = $page->toArray()['props']['email'];
+            });
+
+        $this->actingAs($owner)
+            ->postJson(route('email.preview', $team->slug), [
+                'subject' => $email['subject'],
+                'body' => $email['body'],
+                'variables' => $email['variables'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('problems', [])
+            ->assertJson(fn ($json) => $json->where('html', fn (string $html) => str_contains($html, '<h2>First thing</h2>')
+                && str_contains($html, "See you soon,<br />\nBeth Shalom")
+                && ! str_contains($html, '{{'))->etc());
+    }
+
     public function test_preview_renders_unsaved_email_with_its_variables(): void
     {
         [$team, $owner] = $this->owner();

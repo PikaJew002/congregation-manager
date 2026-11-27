@@ -86,11 +86,22 @@ const statusVariant = (email: Email) =>
                 title="Emails"
                 description="Recurring emails, like the Shabbat invite, and one-time emails, like a newsletter"
             />
-            <Button as-child>
-                <Link :href="create(teamSlug)">
-                    <Plus class="size-4" /> New email
-                </Link>
-            </Button>
+            <div class="flex flex-wrap gap-2">
+                <Button variant="outline" as-child>
+                    <Link
+                        :href="
+                            create(teamSlug, { query: { template: 'letter' } })
+                        "
+                    >
+                        New newsletter
+                    </Link>
+                </Button>
+                <Button as-child>
+                    <Link :href="create(teamSlug)">
+                        <Plus class="size-4" /> New email
+                    </Link>
+                </Button>
+            </div>
         </div>
 
         <div
